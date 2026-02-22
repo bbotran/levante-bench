@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "levante-bench"
+version = "0.1.0"
+description = "LEVANTE VLM benchmark: compare VLMs to children's behavioral data"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "torch",
+    "Pillow",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "black", "isort"]
+transformers = ["transformers"]
+
+[project.scripts]
+levante-bench = "levante_bench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
