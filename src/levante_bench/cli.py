@@ -33,15 +33,27 @@ def cmd_run_eval(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir) if args.output_dir else None
     if output_dir is None:
         output_dir = _project_root() / "results" / version
+    data_root = _project_root() / "data"
+    print(f"Running evaluation: version={version}, device={device}, output={output_dir}")
+    print(f"  Data root: {data_root}")
+    if task_ids:
+        print(f"  Tasks: {', '.join(task_ids)}")
+    if model_ids:
+        print(f"  Models: {', '.join(model_ids)}")
     results = run_eval(
         task_ids=task_ids,
         model_ids=model_ids,
         version=version,
         device=device,
         output_dir=output_dir,
+        data_root=data_root,
     )
+    if not results:
+        print("No outputs written. Check that data/raw/<version>/ and data/assets/<version>/ exist and item_uid index matches trials.", file=sys.stderr)
+        return 1
+    print(f"Success: wrote {len(results)} file(s)")
     for (task_id, model_id), path in results.items():
-        print(f"{task_id}\t{model_id}\t{path}")
+        print(f"  {task_id}\t{model_id}\t{path}")
     return 0
 
 

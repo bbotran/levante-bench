@@ -1,23 +1,14 @@
 """VLM adapters for LEVANTE benchmark. Registry: name -> class."""
 
 from levante_bench.models.base import EvalModel, GenEvalModel
+from levante_bench.models.registry import (
+    get_model_class,
+    list_models,
+    register,
+)
 
-_MODEL_REGISTRY: dict[str, type] = {}
-
-
-def register(name: str):
-    def decorator(cls):
-        _MODEL_REGISTRY[name] = cls
-        return cls
-    return decorator
-
-
-def get_model_class(name: str) -> type | None:
-    return _MODEL_REGISTRY.get(name)
-
-
-def list_models() -> list[str]:
-    return list(_MODEL_REGISTRY.keys())
+# Import model modules so @register() runs and populates the registry
+from levante_bench.models import clip  # noqa: F401
 
 
 __all__ = [

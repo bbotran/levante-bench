@@ -1,5 +1,6 @@
 """Run one or all tasks for one or many models; write model outputs to disk."""
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -38,13 +39,16 @@ def run_eval(
     for task_id in task_ids:
         task_def = get_task_def(task_id, version)
         if not task_def:
+            print(f"  Skip {task_id}: no task_def for version={version}", file=sys.stderr)
             continue
         manifest = load_trials_for_task(task_id, version, data_root=data_root)
         if manifest.empty:
+            print(f"  Skip {task_id}: no trials or item_uid (check data/raw/{version}/)", file=sys.stderr)
             continue
         base_path = data_root / "assets" / version
         dataset = LevanteDataset(manifest, base_path=base_path)
         if len(dataset) == 0:
+            print(f"  Skip {task_id}: dataset empty (check data/assets/{version}/ item_uid index)", file=sys.stderr)
             continue
         dataloader = DataLoader(
             dataset,
@@ -52,18 +56,24 @@ def run_eval(
             shuffle=False,
             collate_fn=collate_levante,
         )
+        n_trials = len(dataset)
         for model_id in model_ids:
             model_cls = get_model_class(model_id)
             if not model_cls:
+                print(f"  Skip {task_id} / {model_id}: model not registered (list-models to see available)", file=sys.stderr)
                 continue
             try:
                 model = model_cls(device=device)
-            except Exception:
+            except Exception as e:
+                print(f"  Skip {task_id} / {model_id}: model load failed — {e}", file=sys.stderr)
                 continue
             scores = _get_scores(model, dataloader, task_def.n_options)
-            if scores is not None:
-                path = write_task_output(output_dir, task_id, model_id, scores)
-                results[(task_id, model_id)] = path
+            if scores is None:
+                print(f"  Skip {task_id} / {model_id}: no scores from model", file=sys.stderr)
+                continue
+            path = write_task_output(output_dir, task_id, model_id, scores)
+            results[(task_id, model_id)] = path
+            print(f"  Wrote {path} ({scores.shape[0]} trials, {scores.shape[1]} options)")
     return results
 
 

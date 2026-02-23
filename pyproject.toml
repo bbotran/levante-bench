@@ -9,12 +9,13 @@ description = "LEVANTE VLM benchmark: compare VLMs to children's behavioral data
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "numpy",
-    "pandas",
-    "torch",
-    "Pillow",
-    "requests",
+    "numpy>=1.26,<3",
+    "pandas>=2.2",
+    "torch>=2.2",
+    "Pillow>=10",
+    "requests>=2.31",
 ]
+# Pinned versions for reproducible installs: see requirements.txt
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "black", "isort"]

@@ -94,7 +94,7 @@ compare_one <- function(task_id, model_id, version, results_base, project_root) 
   safe_model <- gsub("[^a-zA-Z0-9_-]", "_", model_id)
   npy_path <- file.path(results_base, safe_model, paste0(safe_task, ".npy"))
   if (!file.exists(npy_path)) {
-    return(tibble(task = task_id, model = model_id, error = "npy not found"))
+    return(tibble(task = task_id, model = model_id, error = paste0("npy not found: ", npy_path)))
   }
   model_wide <- load_model_npy(npy_path)
 
@@ -126,7 +126,7 @@ if (is.na(task_id) || is.na(model_id)) {
 
 res <- compare_one(task_id, model_id, version, results_base, project_root)
 if ("error" %in% names(res)) {
-  message(res$error)
+  message("Error: ", res$error)
   quit(save = "no", status = 1)
 }
 

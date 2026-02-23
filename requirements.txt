@@ -1,0 +1,8 @@
+# Pinned dependencies for levante-bench (pip install -r requirements.txt)
+# Python >=3.10
+
+numpy==1.26.4
+pandas==2.2.2
+torch==2.2.2
+Pillow==10.4.0
+requests==2.32.3

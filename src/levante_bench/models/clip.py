@@ -1,6 +1,6 @@
 """CLIP-style similarity model adapter."""
 
-from levante_bench.models import register
+from levante_bench.models.registry import register
 from levante_bench.models.base import EvalModel
 
 

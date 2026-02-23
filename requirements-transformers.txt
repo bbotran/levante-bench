@@ -1,0 +1,3 @@
+# Optional: CLIP/transformers support (install after requirements.txt)
+-r requirements.txt
+transformers==4.45.0
