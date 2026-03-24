@@ -1,5 +1,6 @@
 # Data and secrets (do not commit)
-data/
+# Leading / = only repo-root data/ (not src/levante_bench/data/ package code)
+/data/
 .secrets
 
 # Python
