@@ -1,0 +1,8 @@
+scope,trial_type,chance_baseline
+overall,OVERALL,0.4166666666666667
+by_type,action_question,0.3333333333333333
+by_type,attribution_question,0.5
+by_type,emotion_reasoning_question,0.25
+by_type,false_belief_question,0.4615384615384615
+by_type,reality_check_question,0.48333333333333334
+by_type,reference_question,0.3333333333333333

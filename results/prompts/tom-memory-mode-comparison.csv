@@ -1,0 +1,4 @@
+memory_mode,n_total,accuracy_all,parse_rate
+none,37,0.5675675675675675,1.0
+oracle,37,0.4594594594594595,1.0
+model,37,0.2702702702702703,1.0

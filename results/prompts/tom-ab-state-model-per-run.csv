@@ -1,0 +1,11 @@
+variant,seed,accuracy_all
+standard_1stage,1,0.5405405405405406
+standard_1stage,2,0.5675675675675675
+standard_1stage,3,0.5135135135135135
+standard_1stage,4,0.4864864864864865
+standard_1stage,5,0.6216216216216216
+trialaware_2stage,1,0.5135135135135135
+trialaware_2stage,2,0.5135135135135135
+trialaware_2stage,3,0.4864864864864865
+trialaware_2stage,4,0.3783783783783784
+trialaware_2stage,5,0.4594594594594595
