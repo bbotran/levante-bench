@@ -1,0 +1,2 @@
+{"item_uid": "tom_reality_known_false_belief", "scenario": "", "item": "1c", "mode": "screenshots", "seed": 1, "gold": "B", "pred": "B", "correct": 1, "n_options": 2, "used_image": 1, "raw_response": "B"}
+{"item_uid": "tom_reality_known_reality_check", "scenario": "", "item": "1c", "mode": "screenshots", "seed": 1, "gold": "B", "pred": "B", "correct": 1, "n_options": 2, "used_image": 1, "raw_response": "B"}

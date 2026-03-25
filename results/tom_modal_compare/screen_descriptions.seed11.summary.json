@@ -1,0 +1,12 @@
+{
+  "mode": "screen_descriptions",
+  "seed": 11,
+  "n": 37,
+  "accuracy": 0.3783783783783784,
+  "parse_rate": 1.0,
+  "chance": 0.3963963963963964,
+  "lift_vs_chance": -0.018018018018018,
+  "images_used": 0,
+  "device": "cuda:0",
+  "cuda_available": true
+}
