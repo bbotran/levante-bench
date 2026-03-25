@@ -84,3 +84,23 @@ The file `src/levante_bench/config/irt_model_mapping.csv` maps each task to its 
 
 - **Spot-check**
   Inspect a few item_uids: in the accuracy CSV check that correct matches your expectation; in the D_KL CSV compare D_KL across ability bins or items.
+
+## Vocab Graphics Bundle
+
+Tracked vocab quadrant graphics live under `local_data/vocab_graphics/`.
+
+- Graphics directory: `local_data/vocab_graphics/images/`
+- Placement manifest: `local_data/vocab_graphics/vocab-quadrants-manifest.csv`
+- Summary stats: `local_data/vocab_graphics/vocab-quadrants-summary.json`
+
+Regenerate with:
+
+```bash
+python3 scripts/build_vocab_quadrant_graphics.py \
+  --corpus-csv data/assets/2026-03-24/corpus/vocab/vocab-item-bank.csv \
+  --visual-dir data/assets/2026-03-24/visual/vocab \
+  --out-dir local_data/vocab_graphics/images \
+  --manifest-csv local_data/vocab_graphics/vocab-quadrants-manifest.csv \
+  --summary-json local_data/vocab_graphics/vocab-quadrants-summary.json \
+  --seed 11
+```
