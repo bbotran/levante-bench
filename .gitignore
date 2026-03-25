@@ -3,6 +3,10 @@
 /data/
 .secrets
 
+# Generated evaluation artifacts
+/results/
+/screenshots/
+
 # Python
 __pycache__/
 *.py[cod]
