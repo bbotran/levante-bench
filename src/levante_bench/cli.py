@@ -3,6 +3,7 @@
 import argparse
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -14,6 +15,8 @@ WORKFLOW_SCRIPTS = {
     "tom-modal": "run_tom_modal_eval.py",
     "tom-robustness": "run_tom_robustness.py",
 }
+
+DEFAULT_SMOLVLM2_MODEL = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
 
 
 def _project_root() -> Path:
@@ -97,6 +100,65 @@ def cmd_run_workflow(args: argparse.Namespace) -> int:
     return subprocess.run(cmd, cwd=str(root)).returncode
 
 
+def cmd_run_benchmark(args: argparse.Namespace) -> int:
+    from levante_bench.evaluation.runner import resolve_device
+
+    root = _project_root()
+    device = resolve_device(args.device)
+    data_version = args.data_version or "2026-03-24"
+    model_id = args.model_id or DEFAULT_SMOLVLM2_MODEL
+
+    if args.benchmark == "v1":
+        cmd = [
+            sys.executable,
+            str(root / "scripts" / "run_benchmark_v1.py"),
+            "--data-version",
+            data_version,
+            "--device",
+            device,
+            "--model-id",
+            model_id,
+        ]
+        if args.max_items_math is not None:
+            cmd.extend(["--max-items-math", str(args.max_items_math)])
+        if args.max_items_tom is not None:
+            cmd.extend(["--max-items-tom", str(args.max_items_tom)])
+    elif args.benchmark == "vocab":
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_dir = root / "results" / "benchmark" / "vocab" / ts
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            sys.executable,
+            str(root / "scripts" / "run_smolvlmv2_vocab_eval.py"),
+            "--corpus-csv",
+            str(root / "data" / "assets" / data_version / "corpus" / "vocab" / "vocab-item-bank.csv"),
+            "--visual-dir",
+            str(root / "data" / "assets" / data_version / "visual" / "vocab"),
+            "--output-jsonl",
+            str(out_dir / "vocab-preds.jsonl"),
+            "--summary-json",
+            str(out_dir / "vocab-summary.json"),
+            "--composite-dir",
+            str(out_dir / "vocab-composites"),
+            "--device",
+            device,
+            "--model-id",
+            model_id,
+        ]
+        if args.max_items_vocab is not None:
+            cmd.extend(["--max-items", str(args.max_items_vocab)])
+    else:
+        print(f"Unknown benchmark: {args.benchmark}", file=sys.stderr)
+        return 1
+
+    extra = args.benchmark_args or []
+    if extra and extra[0] == "--":
+        extra = extra[1:]
+    cmd.extend(extra)
+    print("Running benchmark:", " ".join(cmd))
+    return subprocess.run(cmd, cwd=str(root)).returncode
+
+
 def cmd_run_comparison(args: argparse.Namespace) -> int:
     root = _project_root()
     script = root / "comparison" / "compare_levante.R"
@@ -148,6 +210,20 @@ def main() -> int:
         nargs=argparse.REMAINDER,
         help="Arguments passed through to the workflow script (prefix with --).",
     )
+    # run-benchmark
+    pb = sub.add_parser("run-benchmark", help="Run integrated benchmark presets (v1, vocab)")
+    pb.add_argument("--benchmark", required=True, choices=["v1", "vocab"])
+    pb.add_argument("--data-version", default="2026-03-24", help="Data/assets version")
+    pb.add_argument("--model-id", default=DEFAULT_SMOLVLM2_MODEL, help="Model id")
+    pb.add_argument("--device", default="auto", help="Device: auto|cpu|cuda")
+    pb.add_argument("--max-items-math", type=int, default=None, help="Optional cap for v1 math")
+    pb.add_argument("--max-items-tom", type=int, default=None, help="Optional cap for v1 ToM")
+    pb.add_argument("--max-items-vocab", type=int, default=None, help="Optional cap for vocab benchmark")
+    pb.add_argument(
+        "benchmark_args",
+        nargs=argparse.REMAINDER,
+        help="Extra args forwarded to the underlying benchmark script (prefix with --).",
+    )
     # run-comparison
     pc = sub.add_parser("run-comparison", help="Run R comparison (D_KL by age+item_uid, accuracy by item_uid)")
     pc.add_argument("--task", required=True, help="Task ID")
@@ -168,6 +244,8 @@ def main() -> int:
         return cmd_run_eval(args)
     if args.command == "run-workflow":
         return cmd_run_workflow(args)
+    if args.command == "run-benchmark":
+        return cmd_run_benchmark(args)
     if args.command == "run-comparison":
         return cmd_run_comparison(args)
     return 0

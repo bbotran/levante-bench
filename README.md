@@ -26,6 +26,8 @@ Pinned deps: [requirements.txt](requirements.txt). Dev: [requirements-dev.txt](r
    - `levante-bench list-models`
    - `levante-bench check-gpu`  # verify local CUDA availability
    - `levante-bench run-eval --task trog --model clip_base [--version VERSION]`
+   - `levante-bench run-benchmark --benchmark v1 --device auto`
+   - `levante-bench run-benchmark --benchmark vocab --device auto`
    - `levante-bench run-workflow --workflow smol-vocab -- --help`
    - `levante-bench run-workflow --workflow benchmark-v1 -- --help`
 5. **Compare (R):** Run `levante-bench run-comparison --task trog --model clip_base` or run `Rscript comparison/compare_levante.R --task TASK --model MODEL` directly. Outputs accuracy (with IRT item difficulty) and D_KL (by ability bin) to `results/comparison/`.
