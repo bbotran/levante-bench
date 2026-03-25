@@ -6,7 +6,7 @@ from typing import Any
 
 from omegaconf import DictConfig, OmegaConf
 
-from levante_bench.config import get_data_root, get_task_def, load_model_config, load_task_config
+from levante_bench.config import get_task_def, load_model_config, load_task_config
 from levante_bench.evaluation.cache import load_cache, save_cache, trial_hash
 from levante_bench.evaluation.outputs import write_task_csv, write_summary_csv
 from levante_bench.models import get_model_class
@@ -15,7 +15,7 @@ from levante_bench.tasks import get_task_dataset
 
 def run_eval(cfg: DictConfig) -> dict[str, Path]:
     """Evaluate each model across all tasks using experiment config."""
-    data_root = get_data_root()
+    data_root = Path(cfg.data_root)
     version = cfg.get("version", "current")
     output_base = Path(cfg.get("output_dir", "results"))
     device = cfg.get("device", "cpu")
@@ -58,7 +58,7 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
                 continue
 
             # Load task dataset
-            task_def = get_task_def(task_id, version)
+            task_def = get_task_def(task_id, version, data_root=data_root)
             if task_def is None:
                 print(f"  Skip {task_id}: no task def for version={version}", file=sys.stderr)
                 continue

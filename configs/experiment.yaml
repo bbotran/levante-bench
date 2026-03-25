@@ -4,10 +4,9 @@ models:
   - smolvlm2
 
 tasks:
-  - egma-math
-  - trog
-  - matrix-reasoning
+  - vocab
 
+data_root: data
 output_dir: results
-version: current
+version: 2026-03-24
 device: cpu

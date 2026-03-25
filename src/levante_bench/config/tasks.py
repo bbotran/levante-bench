@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Optional
 
-from levante_bench.config.defaults import get_data_root
 from levante_bench.config.loader import get_configs_root, load_task_config
 from levante_bench.data.schema import TaskDef
 
@@ -14,28 +13,30 @@ def _safe_task_id(task_id: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", task_id)
 
 
-def get_task_def(task_id: str, version: str) -> Optional[TaskDef]:
+def get_task_def(task_id: str, version: str, data_root: Path | None = None) -> Optional[TaskDef]:
     """Build TaskDef from configs/tasks/<task_id>.yaml with paths resolved."""
     cfg = load_task_config(task_id)
     if cfg is None:
         return None
 
-    data_root = get_data_root()
-    raw = data_root / "raw" / version
-    safe = _safe_task_id(task_id)
-
-    manifest_path = raw / "tasks" / f"{safe}_trials.csv"
-    if not manifest_path.exists():
-        manifest_path = raw / "trials.csv"
-    human_path = raw / "human" / f"{safe}.csv"
-    if not human_path.exists():
+    if data_root is not None:
+        raw = Path(data_root) / "raw" / version
+        safe = _safe_task_id(task_id)
+        manifest_path = raw / "tasks" / f"{safe}_trials.csv"
+        if not manifest_path.exists():
+            manifest_path = raw / "trials.csv"
+        human_path = raw / "human" / f"{safe}.csv"
+        if not human_path.exists():
+            human_path = None
+    else:
+        manifest_path = None
         human_path = None
 
     return TaskDef(
         task_id=cfg.task_id,
         benchmark_name=cfg.get("benchmark_name", cfg.task_id),
         internal_name=cfg.get("internal_name", cfg.task_id),
-        manifest_path=manifest_path if manifest_path.exists() else None,
+        manifest_path=manifest_path if manifest_path and manifest_path.exists() else None,
         human_response_path=human_path,
         task_type=cfg.get("task_type", "forced-choice"),
         n_options=cfg.get("n_options", 4),

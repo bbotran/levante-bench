@@ -3,7 +3,6 @@
 import re
 from typing import Any, Optional
 
-from PIL import Image
 
 
 class VLMModel:
@@ -27,7 +26,7 @@ class VLMModel:
     def generate(
         self,
         prompt_text: str,
-        images: list[Image.Image] | None = None,
+        image_paths: list[str] | None = None,
         max_new_tokens: int = 64,
     ) -> str:
         """Generate text given a prompt and optional images."""
@@ -36,7 +35,7 @@ class VLMModel:
     def _build_messages(
         self,
         prompt_text: str,
-        images: list[Image.Image] | None = None,
+        image_paths: list[str] | None = None,
     ) -> list[dict]:
         """Wrap prompt + images into model-specific chat message format."""
         raise NotImplementedError
@@ -47,10 +46,10 @@ class VLMModel:
 
     def evaluate_trial(self, trial: dict) -> dict:
         """Run a single trial: generate answer, parse it, return result."""
-        images = trial.get("context_images", []) + trial.get("option_images", [])
+        image_paths = trial.get("context_image_paths", []) + trial.get("option_image_paths", [])
         raw_output = self.generate(
             prompt_text=trial["prompt"],
-            images=images if images else None,
+            image_paths=image_paths if image_paths else None,
             max_new_tokens=trial.get("max_new_tokens", 64),
         )
         clean_text = self.parse_response(raw_output)
