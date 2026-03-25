@@ -1,6 +1,10 @@
 # Data and secrets (do not commit)
 # Leading / = only repo-root data/ (not src/levante_bench/data/ package code)
-/data/
+# Ignore everything under data/, then selectively unignore manifest.
+/data/*
+!/data/assets/
+/data/assets/*
+!/data/assets/manifest.csv
 .secrets
 
 # Generated evaluation artifacts
@@ -56,5 +60,3 @@ htmlcov/
 .Rhistory
 .RData
 .Ruserdata
-
-!/data/assets/manifest.csv
