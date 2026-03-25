@@ -56,3 +56,5 @@ htmlcov/
 .Rhistory
 .RData
 .Ruserdata
+
+!/data/assets/manifest.csv
