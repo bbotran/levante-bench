@@ -1,0 +1,13 @@
+# Experiment config — references model and task configs to run.
+
+models:
+  - smolvlm2
+
+tasks:
+  - egma-math
+  - trog
+  - matrix-reasoning
+
+output_dir: results
+version: current
+device: cpu

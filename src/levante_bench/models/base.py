@@ -1,96 +1,86 @@
-"""Base classes for VLM evaluation: EvalModel (similarity) and GenEvalModel (generative)."""
+"""Base class for VLM evaluation models."""
 
-from abc import ABC
-from typing import Any
+from typing import Any, Optional
 
-import numpy as np
-import torch
+from PIL import Image
 
 
-class EvalModel(ABC):
-    """CLIP-style model: image/text features and similarity scores."""
+class VLMModel:
+    """Base class for all VLM models used in evaluation.
 
-    def __init__(
+    Subclasses implement load(), generate(), and _build_messages() for
+    model-specific behavior. evaluate_trial() and parse_answer() provide
+    default implementations that subclasses can override.
+    """
+
+    def __init__(self, model_name: str, device: str = "cpu") -> None:
+        self.model_name = model_name
+        self.device = device
+        self.model = None
+        self.processor = None
+
+    def load(self) -> None:
+        """Load model and processor onto device."""
+        ...
+
+    def generate(
         self,
-        model: torch.nn.Module,
-        processor: Any = None,
-        device: str | torch.device = "cpu",
-    ) -> None:
-        self.device = device if isinstance(device, torch.device) else torch.device(device)
-        self.model = model.to(self.device)
-        self.processor = processor
-        self.get_image_features = getattr(model, "get_image_features", None)
-        self.get_text_features = getattr(model, "get_text_features", None)
-        self.get_similarity_scores = getattr(
-            model, "get_similarity_scores",
-            lambda **x: getattr(model(**x), "logits_per_image", None),
-        )
+        prompt_text: str,
+        images: list[Image.Image] | None = None,
+        max_new_tokens: int = 64,
+    ) -> str:
+        """Generate text given a prompt and optional images.
 
-    def get_all_image_feats(self, dataloader: Any) -> np.ndarray:
-        all_feats = []
-        with torch.no_grad():
-            for d in dataloader:
-                inputs = self.processor(images=d["images"], return_tensors="pt").to(self.device)
-                feats = self.get_image_features(**inputs).detach().cpu().numpy()
-                all_feats.append(feats)
-        return np.concatenate(all_feats, axis=0)
+        Args:
+            prompt_text: Formatted prompt string from task formatter.
+            images: Context and/or option images (order determined by task).
+            max_new_tokens: Max tokens to generate.
 
-    def get_all_text_feats(self, dataloader: Any) -> np.ndarray:
-        all_feats = []
-        with torch.no_grad():
-            for d in dataloader:
-                inputs = self.processor(
-                    text=d["text"], return_tensors="pt", padding=True
-                ).to(self.device)
-                feats = self.get_text_features(**inputs).detach().cpu().numpy()
-                all_feats.append(feats)
-        return np.concatenate(all_feats, axis=0)
+        Returns:
+            Raw generated text from the model.
+        """
+        ...
 
-    def get_all_sim_scores(
-        self, dataloader: Any, n_options: int | None = None
-    ) -> np.ndarray:
-        all_sims = []
-        with torch.no_grad():
-            for d in dataloader:
-                images = d.get("images") or []
-                if not images:
-                    if n_options is not None:
-                        all_sims.append(
-                            np.full((1, n_options), np.nan, dtype=np.float64)
-                        )
-                    continue
-                inputs = self.processor(
-                    images=images,
-                    text=d["text"],
-                    return_tensors="pt",
-                    padding=True,
-                ).to(self.device)
-                sims = self.get_similarity_scores(**inputs)
-                if sims is not None:
-                    sims = sims.detach().cpu().numpy()
-                all_sims.append(sims)
-        return np.stack(all_sims, axis=0) if all_sims else np.array([]).reshape(0, 0)
-
-
-class GenEvalModel(ABC):
-    """LLaVA-style model: NTP/LL logits over options."""
-
-    def __init__(
+    def _build_messages(
         self,
-        model: torch.nn.Module,
-        processor: Any = None,
-        device: str | torch.device = "cpu",
-    ) -> None:
-        self.device = device if isinstance(device, torch.device) else torch.device(device)
-        self.model = model.to(self.device)
-        self.processor = processor
+        prompt_text: str,
+        images: list[Image.Image] | None = None,
+    ) -> list[dict]:
+        """Wrap prompt + images into model-specific chat message format.
 
-    def get_ntp_logits(self, image: Any, text: str) -> torch.Tensor:
-        raise NotImplementedError
+        Args:
+            prompt_text: The prompt string.
+            images: Optional images to include in the message.
 
-    def get_ll_logits(self, image: Any, text: str) -> torch.Tensor:
-        raise NotImplementedError
+        Returns:
+            List of message dicts in the model's expected chat format.
+        """
+        ...
 
-    def get_all_sim_scores(self, dataloader: Any) -> np.ndarray:
-        """Return per-trial, per-option scores (e.g. logits) for comparison scripts."""
-        raise NotImplementedError
+    def evaluate_trial(self, trial: dict) -> dict:
+        """Run a single trial: generate answer, parse it, return result.
+
+        Args:
+            trial: Standard trial dict from VLMDataset with keys:
+                prompt, options, option_labels, correct_label,
+                context_images, option_images, context_type, option_type
+
+        Returns:
+            Dict with: generated_text, predicted_label, correct_label, is_correct
+        """
+        pass
+
+    def parse_answer(self, generated_text: str, option_labels: list[str]) -> Optional[str]:
+        """Extract predicted option label from generated text.
+
+        Default: exact match, starts-with, regex fallback.
+        Override in subclass if model has a specific output format.
+
+        Args:
+            generated_text: Raw model output.
+            option_labels: Valid labels e.g. ["A", "B", "C", "D"].
+
+        Returns:
+            Matched label, or None if parsing failed.
+        """
+        pass

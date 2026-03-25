@@ -1,20 +1,14 @@
-"""Default paths and LEVANTE assets bucket URL (public, no auth)."""
+"""Default paths and LEVANTE assets bucket URL."""
 
 import os
 from pathlib import Path
 
-
-def get_task_mapping_path() -> Path:
-    """Path to task_name_mapping.csv in the config package."""
-    return Path(__file__).resolve().parent / "task_name_mapping.csv"
-
-# Public GCP bucket for LEVANTE production assets (no .secrets required)
 LEVANTE_ASSETS_BUCKET_URL = "https://storage.googleapis.com/levante-assets-prod"
 
-# Project root: directory containing "src" and "data" or pyproject.toml
+
 def _project_root() -> Path:
+    """Project root: directory containing pyproject.toml or data/."""
     p = Path(__file__).resolve()
-    # From config/defaults.py: config -> levante_bench -> src -> project_root
     for _ in range(4):
         p = p.parent
         if (p / "data").is_dir() or (p / "pyproject.toml").exists():
@@ -23,7 +17,7 @@ def _project_root() -> Path:
 
 
 def get_data_root() -> Path:
-    """Directory for data/ (responses, assets). Default: project_root/data. Override with LEVANTE_BENCH_DATA_ROOT."""
+    """Data directory. Override with LEVANTE_BENCH_DATA_ROOT env var."""
     env = os.environ.get("LEVANTE_BENCH_DATA_ROOT")
     if env:
         return Path(env).resolve()
@@ -31,5 +25,5 @@ def get_data_root() -> Path:
 
 
 def get_assets_base_url() -> str:
-    """Base URL for LEVANTE assets bucket. Override via env LEVANTE_ASSETS_BUCKET_URL if needed."""
+    """Base URL for LEVANTE assets bucket."""
     return os.environ.get("LEVANTE_ASSETS_BUCKET_URL", LEVANTE_ASSETS_BUCKET_URL)

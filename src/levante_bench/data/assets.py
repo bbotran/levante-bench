@@ -1,32 +1,9 @@
-"""Load task name mapping and item_uid -> local paths index; expose lookup for loaders."""
+"""Asset index: item_uid -> local paths lookup for loaders."""
 
 from pathlib import Path
 from typing import Any
 
-from levante_bench.config import get_data_root, get_task_mapping_path
-
-
-def load_task_mapping() -> list[dict[str, str]]:
-    """Load task_name_mapping.csv; returns list of dicts with benchmark_name, internal_name, corpus_file."""
-    path = get_task_mapping_path()
-    if not path.exists():
-        return []
-    rows: list[dict[str, str]] = []
-    with open(path, newline="", encoding="utf-8") as f:
-        import csv
-
-        for row in csv.DictReader(f):
-            internal = (row.get("internal_name") or "").strip()
-            corpus = (row.get("corpus_file") or "").strip()
-            if internal and corpus:
-                rows.append(
-                    {
-                        "benchmark_name": (row.get("benchmark_name") or "").strip(),
-                        "internal_name": internal,
-                        "corpus_file": corpus,
-                    }
-                )
-    return rows
+from levante_bench.config import get_data_root
 
 
 def _asset_index_path(version: str) -> Path:
@@ -34,7 +11,7 @@ def _asset_index_path(version: str) -> Path:
 
 
 def load_asset_index(version: str) -> dict[str, dict[str, Any]]:
-    """Load item_uid -> { task, internal_name, corpus_row, image_paths } from data/assets/<version>/item_uid_index.json."""
+    """Load item_uid index from data/assets/<version>/item_uid_index.json."""
     path = _asset_index_path(version)
     if not path.exists():
         return {}
@@ -45,16 +22,7 @@ def load_asset_index(version: str) -> dict[str, dict[str, Any]]:
 
 
 def get_paths(item_uid: str, task_id: str, version: str = "latest") -> dict[str, Any] | None:
-    """
-    Look up (item_uid, task_id) in the asset index and return corpus row + local paths.
-
-    task_id can be benchmark_name or internal_name. Returns dict with keys:
-    - corpus_row: dict of corpus columns for this item
-    - image_paths: list of local Paths (or paths as strings)
-    - task, internal_name
-
-    Returns None if not found.
-    """
+    """Look up item_uid in asset index. Returns corpus_row + resolved image_paths, or None."""
     if version == "latest":
         assets_base = get_data_root() / "assets"
         if not assets_base.exists():

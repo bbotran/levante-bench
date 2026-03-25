@@ -1,0 +1,12 @@
+# SmolVLM2 model config.
+
+name: smolvlm2
+hf_name: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
+max_new_tokens: 64
+dtype: float32
+
+# What input types this model supports
+capabilities:
+  - text_only
+  - single_image
+  - multi_image
