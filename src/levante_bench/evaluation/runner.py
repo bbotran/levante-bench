@@ -43,7 +43,7 @@ def run_eval(
             continue
         manifest = load_trials_for_task(task_id, version, data_root=data_root)
         if manifest.empty:
-            print(f"  Skip {task_id}: no trials or item_uid (check data/raw/{version}/)", file=sys.stderr)
+            print(f"  Skip {task_id}: no trials or item_uid (check data/responses/{version}/)", file=sys.stderr)
             continue
         base_path = data_root / "assets" / version
         dataset = LevanteDataset(

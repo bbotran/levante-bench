@@ -1,6 +1,6 @@
 # LEVANTE comparison (R)
 
-Statistical comparison of model outputs to human response data by **item_uid** and (for D_KL) **age_bin**. Model runs once per item_uid; human data is pre-aggregated by item_uid and 1-year age bins (5–6, 6–7, …, 12–13).
+Statistical comparison of model outputs to human response data using **IRT-derived ability bins** (not raw age bins). Model runs once per `item_uid`; human response proportions are pre-aggregated by `item_uid` and 1-logit ability bins from fitted IRT models.
 
 ## Dependencies
 
@@ -10,17 +10,28 @@ Statistical comparison of model outputs to human response data by **item_uid** a
 ## Scripts
 
 - **stats-helper.R** – Softmax, KL, beta optimization, RSA (adapted from DevBench).
-- **compare_levante.R** – Reads `data/raw/<version>/human_by_age/<task>_proportions_by_age.csv` (item_uid, age_bin, image1..image4) and `results/<version>/<model>/<task>.npy` (one row per item_uid). Writes **D_KL** (per item_uid × age_bin) and **accuracy** (per item_uid) to separate CSVs.
+- **compare_levante.R** – Reads `data/responses/<version>/responses_by_ability/<task>_proportions_by_ability.csv` (item_uid, ability_bin, image1..image4) and `results/<version>/<model>/<task>.npy` (one row per item_uid). Joins IRT item difficulties from `data/responses/<version>/irt_models/<task>_item_params.csv`. Writes **D_KL** (per item_uid × ability_bin) and **accuracy** (per item_uid, with difficulty) to separate CSVs.
+
+## IRT model mapping
+
+The file `src/levante_bench/config/irt_model_mapping.csv` maps each task to its IRT model `.rds` file in the Redivis model registry. Columns: `task_id, model_file`. The download script reads this to know which `.rds` to fetch. Add rows manually for new tasks.
 
 ## Usage
 
-1. **Preprocess human data (once):** Run the R download script so trials are joined with scores (age) and human_by_age aggregates are written:
+1. **Preprocess human data (once):** Run the R download script to fetch trials, download IRT models, extract item difficulties and ability scores, and write ability-binned human proportions:
 
    ```bash
-   Rscript scripts/download_levante_data.R [--version 2026-02-22] [--scores-table scores:pgms]
+   Rscript scripts/download_levante_data.R [--version 2026-02-22] \
+     [--irt-dataset levante_metadata_scoring:e97h:v1_11] \
+     [--irt-table model_registry:rqwv]
    ```
 
-   This writes `data/raw/<version>/human_by_age/<task>_proportions_by_age.csv` (item_uid, age_bin, image1..image4), with age 5–12.99 and 1-year bins.
+   This produces:
+   - `data/responses/<version>/irt_models/<task>.rds` – downloaded IRT model
+   - `data/responses/<version>/irt_models/<task>_item_params.csv` – item difficulties (item_uid, difficulty)
+   - `data/responses/<version>/irt_models/<task>_ability_scores.csv` – person abilities (run_id, ability, se)
+   - `data/responses/<version>/responses_by_ability/<task>_proportions.csv` – overall response proportions (item_uid, image1..image4)
+   - `data/responses/<version>/responses_by_ability/<task>_proportions_by_ability.csv` – ability-binned response proportions (item_uid, ability_bin, image1..image4), with 1-logit bins
 
 2. **Run evaluation (Python):** One row per item_uid:
 
@@ -37,33 +48,39 @@ Statistical comparison of model outputs to human response data by **item_uid** a
    Or directly: `Rscript comparison/compare_levante.R --task trog --model clip_base --version 2026-02-22 --project-root .`
 
    Outputs (disaggregated):
-   - **D_KL:** `results/comparison/<task>_<model>_d_kl.csv` — columns: task, model, item_uid, age_bin, D_KL.
-   - **Accuracy:** `results/comparison/<task>_<model>_accuracy.csv` — columns: task, model, item_uid, correct (0/1).
+   - **D_KL:** `results/comparison/<task>_<model>_d_kl.csv` — columns: task, model, item_uid, ability_bin, D_KL.
+   - **Accuracy:** `results/comparison/<task>_<model>_accuracy.csv` — columns: task, model, item_uid, correct (0/1), difficulty.
 
 ## Debugging the comparison flow
 
-1. **Use one version everywhere**  
-   Use the same `--version` for: R download (trials + scores → human_by_age), Python run-eval, and run-comparison.
+1. **Use one version everywhere**
+   Use the same `--version` for: R download (trials + IRT → human_by_ability), Python run-eval, and run-comparison.
 
-2. **Human-by-age must exist**  
-   Run `Rscript scripts/download_levante_data.R [--version VERSION]` so `data/raw/<version>/human_by_age/<task>_proportions_by_age.csv` exists. The download script joins trials with the scores table (run_id, age), filters 5 ≤ age ≤ 12.99, bins by year, and aggregates response proportions by item_uid and age_bin.
+2. **Responses-by-ability must exist**
+   Run `Rscript scripts/download_levante_data.R [--version VERSION]` so `data/responses/<version>/responses_by_ability/<task>_proportions_by_ability.csv` exists. The download script joins trials with IRT ability scores (from `@scores`), bins by 1-logit ability width, and aggregates response proportions by item_uid and ability_bin.
 
-3. **Run evaluation (Python)**  
-   `levante-bench run-eval --task <TASK> --model <MODEL> --version <VERSION>`. The loader deduplicates by **item_uid**, so the .npy has one row per item_uid. Check `results/<VERSION>/<model>/<task>.npy`.
+3. **IRT model mapping must be populated**
+   Ensure `src/levante_bench/config/irt_model_mapping.csv` has a row for each task you want to compare. Without it, IRT models won't be downloaded and ability binning falls back to an "all" aggregate.
 
-4. **Run comparison (R)**  
-   `levante-bench run-comparison --task <TASK> --model <MODEL> --version <VERSION>`. Writes D_KL and accuracy CSVs to `--output-dir` (default: results/comparison/). If R fails: ensure human_by_age files exist; .npy row count = number of unique item_uids in trials for that task.
+4. **Run evaluation (Python)**
+   `levante-bench run-eval --task <TASK> --model <MODEL> --version <VERSION>`. The loader deduplicates by **item_uid**, so the .npy has one row per item_uid.
+
+5. **Run comparison (R)**
+   `levante-bench run-comparison --task <TASK> --model <MODEL> --version <VERSION>`. Writes D_KL and accuracy CSVs to `--output-dir` (default: results/comparison/).
 
 ## Sanity-checking the comparison
 
-- **Item_uid alignment**  
+- **Item_uid alignment**
   The loader deduplicates by **item_uid**, so the model runs once per item and the .npy has one row per item_uid. The comparison aligns by item_uid (order from trials = order in .npy).
 
-- **Accuracy**  
-  One row per item_uid: correct = 1 if model argmax (after softmax with fitted β) equals the correct option from the asset index (answer), else 0. Overall accuracy = mean(correct). For 4 options, chance = 0.25.
+- **Accuracy**
+  One row per item_uid: correct = 1 if model argmax (after softmax with fitted beta) equals the correct option, else 0. The `difficulty` column comes from the IRT model's `d` parameter. For 4 options, chance = 0.25. A negative correlation between `difficulty` and `correct` indicates the model finds harder items harder (expected).
 
-- **D_KL**  
-  One row per (item_uid, age_bin): KL(human proportions ‖ model softmax) for that age bin and item. β is fitted once to minimize mean D_KL across all (item_uid, age_bin) pairs. Use the disaggregated D_KL CSV for per-age or per-item analysis.
+- **D_KL**
+  One row per (item_uid, ability_bin): KL(human proportions || model softmax) for that ability bin and item. Beta is fitted once to minimize mean D_KL across all (item_uid, ability_bin) pairs. Use the disaggregated D_KL CSV for per-ability or per-item analysis.
 
-- **Spot-check**  
-  Inspect a few item_uids: in the accuracy CSV check that correct matches your expectation; in the D_KL CSV compare D_KL across age bins or items.
+- **Difficulty correlation**
+  The comparison script reports `difficulty correlation` — the point-biserial correlation between `correct` (0/1) and `difficulty` (IRT `d` parameter). Negative values mean harder items are less likely to be answered correctly by the model.
+
+- **Spot-check**
+  Inspect a few item_uids: in the accuracy CSV check that correct matches your expectation; in the D_KL CSV compare D_KL across ability bins or items.

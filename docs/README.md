@@ -11,7 +11,7 @@ This directory contains user-facing and developer documentation for the LEVANTE 
 
 1. Install R and the `redivis` package; configure auth per [releases.md](releases.md).
 2. Run `scripts/download_levante_assets.py` (optional `--version YYYY-MM-DD`) to download corpus and images from the public LEVANTE assets bucket.
-3. Run `scripts/download_levante_data.R` to fetch trials from Redivis into `data/raw/<version>/`.
+3. Run `scripts/download_levante_data.R` to fetch trials from Redivis into `data/responses/<version>/`.
 4. Run evaluation: `levante-bench run-eval --task <task> --model <model> [--version <version>]`.
 5. Run comparison (R): execute the scripts in `comparison/` or use `run-comparison` if implemented.
 

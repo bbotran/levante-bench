@@ -15,11 +15,11 @@ table <- dataset$table("trials:ztnm")                       # table name may cha
 d <- table$to_tibble()
 ```
 
-The R script `scripts/download_levante_data.R` accepts **dataset** (e.g. `levante_data_pilots:68kn:v2_0`), **table** (e.g. `trials:ztnm`), and optional **version** (default derived from dataset or `"current"`). It writes trials (including key columns such as `task_id`, `trial_id`, `item_uid`, `response`, `correct`) to `data/raw/<version>/`.
+The R script `scripts/download_levante_data.R` accepts **dataset** (e.g. `levante_data_pilots:68kn:v2_0`), **table** (e.g. `trials:ztnm`), and optional **version** (default derived from dataset or `"current"`). It writes trials (including key columns such as `task_id`, `trial_id`, `item_uid`, `response`, `correct`) to `data/responses/<version>/`.
 
 ### New releases
 
-To use a new Redivis release, run the R script with the new dataset/table identifiers (or version id). Output is written to `data/raw/<version>/`. The Python benchmark and R comparison scripts use the same version string (e.g. `--version <version>`) to point at the correct data and assets.
+To use a new Redivis release, run the R script with the new dataset/table identifiers (or version id). Output is written to `data/responses/<version>/`. The Python benchmark and R comparison scripts use the same version string (e.g. `--version <version>`) to point at the correct data and assets.
 
 ## LEVANTE assets (public bucket)
 
@@ -35,7 +35,7 @@ Run `scripts/download_levante_assets.py` with optional `--version YYYY-MM-DD` (d
 
 | Data | Version key | Location |
 |------|-------------|----------|
-| Trials (Redivis) | dataset/table or user-supplied version | `data/raw/<version>/` |
+| Trials (Redivis) | dataset/table or user-supplied version | `data/responses/<version>/` |
 | Assets (bucket) | Download date (YYYY-MM-DD) | `data/assets/<version>/` |
 
 When running evaluation or comparison, use a consistent version (or "latest") so that trials and assets align (e.g. same task set and item_uid space).

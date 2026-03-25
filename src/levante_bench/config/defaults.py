@@ -23,7 +23,7 @@ def _project_root() -> Path:
 
 
 def get_data_root() -> Path:
-    """Directory for data/ (raw trials, assets). Default: project_root/data. Override with LEVANTE_BENCH_DATA_ROOT."""
+    """Directory for data/ (responses, assets). Default: project_root/data. Override with LEVANTE_BENCH_DATA_ROOT."""
     env = os.environ.get("LEVANTE_BENCH_DATA_ROOT")
     if env:
         return Path(env).resolve()

@@ -57,4 +57,4 @@ The result is a tibble of trial-level data. The **dataset** identifier (e.g. `le
 
 ## Human response aggregates
 
-For comparison with model outputs, human data may be aggregated by task and (optionally) age bin: e.g. trial (or item_uid), option index or label, proportion or count, age_bin. The R script and R comparison scripts consume trials and, where needed, produce or use such aggregates (e.g. per-task CSVs in `data/raw/<version>/human/`). Exact format follows DevBench-style layouts (e.g. trial, image1..imageN proportions, age_bin) as needed by the comparison scripts.
+For comparison with model outputs, human data may be aggregated by task and (optionally) age bin: e.g. trial (or item_uid), option index or label, proportion or count, age_bin. The R script and R comparison scripts consume trials and, where needed, produce or use such aggregates (e.g. per-task CSVs in `data/responses/<version>/responses_by_ability/`). Exact format follows DevBench-style layouts (e.g. trial, image1..imageN proportions, age_bin) as needed by the comparison scripts.

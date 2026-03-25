@@ -55,10 +55,10 @@ def _safe_task_id(task_id: str) -> str:
 
 
 def get_task_def(task_id: str, version: str) -> TaskDef | None:
-    """Return TaskDef for task_id with paths resolved under data/raw/<version>/."""
+    """Return TaskDef for task_id with paths resolved under data/responses/<version>/."""
     registry = _load_registry()
     data_root = get_data_root()
-    raw = data_root / "raw" / version
+    raw = data_root / "responses" / version
     safe = _safe_task_id(task_id)
     for r in registry:
         if r["task_id"] == task_id or r["benchmark_name"] == task_id or r["internal_name"] == task_id:

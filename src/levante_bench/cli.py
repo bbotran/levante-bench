@@ -49,7 +49,7 @@ def cmd_run_eval(args: argparse.Namespace) -> int:
         data_root=data_root,
     )
     if not results:
-        print("No outputs written. Check that data/raw/<version>/ and data/assets/<version>/ exist and item_uid index matches trials.", file=sys.stderr)
+        print("No outputs written. Check that data/responses/<version>/ and data/assets/<version>/ exist and item_uid index matches trials.", file=sys.stderr)
         return 1
     print(f"Success: wrote {len(results)} file(s)")
     for (task_id, model_id), path in results.items():
