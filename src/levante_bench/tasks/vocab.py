@@ -1,5 +1,6 @@
 """Vocab dataset. Context: none, options: images of words."""
 
+import re
 import random
 from pathlib import Path
 
@@ -11,13 +12,39 @@ from levante_bench.tasks.registry import register_task
 LABELS = ["A", "B", "C", "D"]
 
 
+def _normalize_term(term: str) -> set[str]:
+    t = term.strip().lower()
+    if not t:
+        return set()
+    compact = re.sub(r"[^a-z0-9]+", "", t)
+    snake = re.sub(r"[^a-z0-9]+", "_", t).strip("_")
+    dash = re.sub(r"[^a-z0-9]+", "-", t).strip("-")
+    return {
+        t,
+        t.replace(" ", "_"),
+        t.replace(" ", ""),
+        t.replace("_", ""),
+        snake,
+        dash,
+        compact,
+    }
+
+
 def _build_image_index(directory: Path) -> dict[str, Path]:
-    """Map image stems to paths, scanned once."""
-    index = {}
+    """Map normalized filename variants to paths, scanned once."""
+    index: dict[str, Path] = {}
     for path in directory.iterdir():
         if path.is_file():
-            index[path.stem] = path
+            for key in _normalize_term(path.stem):
+                index.setdefault(key, path)
     return index
+
+
+def _resolve_image(term: str, image_index: dict[str, Path]) -> Path | None:
+    for candidate in _normalize_term(term):
+        if candidate in image_index:
+            return image_index[candidate]
+    return None
 
 
 @register_task("vocab")
@@ -59,7 +86,7 @@ class VocabDataset(VLMDataset):
         # Resolve option image paths from cached index
         option_image_paths = []
         for word in all_options:
-            path = self.image_index.get(word.strip())
+            path = _resolve_image(word.strip(), self.image_index)
             if path is None:
                 raise FileNotFoundError(
                     f"Image not found for '{word}' in {self.image_dir} "
