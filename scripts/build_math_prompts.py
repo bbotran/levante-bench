@@ -48,7 +48,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--shuffle-options",
         action="store_true",
-        help="Shuffle answer choices while preserving gold index (default: no shuffle)",
+        default=True,
+        help="Shuffle answer choices while preserving gold index (default: enabled)",
+    )
+    p.add_argument(
+        "--no-shuffle-options",
+        dest="shuffle_options",
+        action="store_false",
+        help="Disable option shuffling (legacy behavior).",
     )
     p.add_argument(
         "--numberline-hint",
@@ -58,6 +65,21 @@ def parse_args() -> argparse.Namespace:
             "Optional extra hint for Number Line prompts derived from item_uid. "
             "'coarse' adds approximate location (left/middle/right), "
             "'exact' adds the marked number."
+        ),
+    )
+    p.add_argument(
+        "--numberline-graphics-dir",
+        type=Path,
+        default=None,
+        help="Optional directory of numberline images to attach for numberline items.",
+    )
+    p.add_argument(
+        "--numberline-instruction-style",
+        choices=["minimal", "stepwise"],
+        default="stepwise",
+        help=(
+            "How explicitly to instruct numberline interpretation when image is attached. "
+            "'minimal' gives compact guidance; 'stepwise' gives a short procedure."
         ),
     )
     p.add_argument("--seed", type=int, default=0, help="Random seed when --shuffle-options is used")
@@ -123,7 +145,60 @@ def _numberline_hint(item_uid: str, numberline_hint: str) -> str | None:
     return f"The marked point is near the {loc} of the number line (0 to {upper})."
 
 
-def _build_prompt_text(row: dict[str, str], options: list[str], numberline_hint: str) -> str:
+def _is_numberline_row(row: dict[str, str]) -> bool:
+    trial_type = (row.get("trial_type") or "").strip().lower()
+    return trial_type.startswith("number line")
+
+
+def _pair_from_text(value: str) -> tuple[int, int] | None:
+    nums = re.findall(r"\d+", value or "")
+    if len(nums) < 2:
+        return None
+    return (int(nums[-2]), int(nums[-1]))
+
+
+def _build_numberline_index(graphics_dir: Path | None) -> dict[tuple[int, int], Path]:
+    idx: dict[tuple[int, int], Path] = {}
+    if graphics_dir is None or not graphics_dir.exists():
+        return idx
+    for p in graphics_dir.iterdir():
+        if not p.is_file() or p.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            continue
+        pair = _pair_from_text(p.stem)
+        if pair is not None and pair not in idx:
+            idx[pair] = p
+    return idx
+
+
+def _resolve_numberline_image(item_uid: str, index: dict[tuple[int, int], Path]) -> Path | None:
+    pair = _pair_from_text(item_uid)
+    if pair is None:
+        return None
+    return index.get(pair)
+
+
+def _numberline_interpretation_text(style: str) -> str:
+    if style == "minimal":
+        return (
+            "Interpretation: read the numeric labels at the left and right endpoints in the image to determine the scale. "
+            "The number line runs left-to-right, equal spacing means equal numeric intervals, and the marked point is the target value."
+        )
+    return (
+        "Interpretation procedure: "
+        "(1) Read the left and right endpoint labels in the image to determine the scale. "
+        "(2) Use equal spacing between ticks to infer each interval value. "
+        "(3) Locate the marked point and estimate its numeric value. "
+        "(4) Select the option whose value is closest to that point."
+    )
+
+
+def _build_prompt_text(
+    row: dict[str, str],
+    options: list[str],
+    numberline_hint: str,
+    has_numberline_image: bool,
+    numberline_instruction_style: str,
+) -> str:
     trial_type = (row.get("trial_type") or "").strip()
     stem = (row.get("prompt") or "").strip()
     item = (row.get("item") or "").strip()
@@ -139,9 +214,14 @@ def _build_prompt_text(row: dict[str, str], options: list[str], numberline_hint:
         lines.append(f"Instruction: {stem}")
     if item:
         lines.append(f"Problem: {item}")
-    hint = _numberline_hint(item_uid, numberline_hint)
-    if hint is not None and trial_type.lower().startswith("number line"):
-        lines.append(f"Hint: {hint}")
+    if _is_numberline_row(row):
+        lines.append(_numberline_interpretation_text(numberline_instruction_style))
+        if has_numberline_image:
+            lines.append("Use the attached numberline image to answer.")
+        else:
+            hint = _numberline_hint(item_uid, numberline_hint)
+            if hint is not None:
+                lines.append(f"Hint: {hint}")
     lines.append("Options:")
     for i, opt in enumerate(options):
         lines.append(f"{LETTERS[i]}. {opt}")
@@ -153,6 +233,8 @@ def _record_from_row(
     shuffle_options: bool,
     rng: random.Random,
     numberline_hint: str,
+    numberline_index: dict[tuple[int, int], Path],
+    numberline_instruction_style: str,
 ) -> dict[str, object] | None:
     answer = (row.get("answer") or "").strip()
     distractors = _split_alternatives((row.get("response_alternatives") or "").strip())
@@ -172,10 +254,18 @@ def _record_from_row(
     if shuffle_options:
         rng.shuffle(options)
     gold_index = options.index(answer)
-    prompt_text = _build_prompt_text(row, options, numberline_hint=numberline_hint)
+    item_uid = (row.get("item_uid") or "").strip()
+    numberline_image = _resolve_numberline_image(item_uid, numberline_index) if _is_numberline_row(row) else None
+    prompt_text = _build_prompt_text(
+        row,
+        options,
+        numberline_hint=numberline_hint,
+        has_numberline_image=numberline_image is not None,
+        numberline_instruction_style=numberline_instruction_style,
+    )
 
     return {
-        "item_uid": (row.get("item_uid") or "").strip(),
+        "item_uid": item_uid,
         "task": (row.get("task") or "").strip(),
         "trial_type": (row.get("trial_type") or "").strip(),
         "assessment_stage": (row.get("assessment_stage") or "").strip(),
@@ -192,11 +282,13 @@ def _record_from_row(
                 "content": [{"type": "text", "text": prompt_text}],
             }
         ],
+        "image_paths": [str(numberline_image)] if numberline_image is not None else [],
     }
 
 
 def run(args: argparse.Namespace) -> tuple[int, int]:
     rng = random.Random(args.seed)
+    numberline_index = _build_numberline_index(args.numberline_graphics_dir)
     kept = 0
     skipped = 0
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -219,6 +311,8 @@ def run(args: argparse.Namespace) -> tuple[int, int]:
                 shuffle_options=args.shuffle_options,
                 rng=rng,
                 numberline_hint=args.numberline_hint,
+                numberline_index=numberline_index,
+                numberline_instruction_style=args.numberline_instruction_style,
             )
             if rec is None:
                 skipped += 1
