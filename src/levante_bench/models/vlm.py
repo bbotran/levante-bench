@@ -190,7 +190,11 @@ class Qwen35Model(VLMModel):
         prompt_text: str,
         pil_images: Optional[list] = None,
     ) -> list[dict]:
-        """Build Qwen3.5 chat messages with PIL images at <imageN> placeholders."""
+        """Build Qwen3.5 chat messages with PIL images at <imageN> placeholders.
+
+        A system prompt is prepended so the model outputs only the answer
+        letter rather than a chain-of-thought explanation.
+        """
         content = []
         if pil_images and re.search(r'<image\d+>', prompt_text):
             parts = re.split(r'(<image\d+>)', prompt_text)
@@ -207,8 +211,34 @@ class Qwen35Model(VLMModel):
                 for img in pil_images:
                     content.append({"type": "image", "image": img})
             content.append({"type": "text", "text": prompt_text})
-        return [{"role": "user", "content": content}]
+        return [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant. Answer with only a single letter: A, B, C, or D. Do not explain.",
+            },
+            {"role": "user", "content": content},
+        ]
 
     def parse_response(self, raw_output: str) -> str:
         """Return generated text as-is (already decoded from generated tokens only)."""
         return raw_output.strip()
+
+    def parse_answer(self, text: str, option_labels: list[str]) -> Optional[str]:
+        """Extract the answer letter from Qwen3.5 output.
+
+        Tries the base class logic first (handles direct "A" / "A." responses).
+        Falls back to scanning the end of the text for the last standalone label
+        in case the model reasoned before concluding with e.g. 'The answer is B'.
+        """
+        result = super().parse_answer(text, option_labels)
+        if result is not None:
+            return result
+
+        # Scan sentence-by-sentence from the end for the last label mention
+        sentences = re.split(r'[.!?\n]', text)
+        for sentence in reversed(sentences):
+            sentence = sentence.strip()
+            for label in option_labels:
+                if re.search(rf'\b{re.escape(label)}\b', sentence, re.IGNORECASE):
+                    return label
+        return None
