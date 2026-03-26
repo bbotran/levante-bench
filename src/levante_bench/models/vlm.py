@@ -242,3 +242,135 @@ class Qwen35Model(VLMModel):
                 if re.search(rf'\b{re.escape(label)}\b', sentence, re.IGNORECASE):
                     return label
         return None
+
+
+@register("internvl35")
+class InternVL35Model(VLMModel):
+    """InternVL3.5 via HuggingFace-native format (OpenGVLab/InternVL3_5-{size}-HF).
+
+    Uses AutoProcessor + AutoModelForImageTextToText with trust_remote_code=True.
+    Images are loaded as PIL objects.  The Qwen-based chat template is applied by
+    the processor, so the generate() pipeline mirrors Qwen35Model closely.
+    """
+
+    def __init__(
+        self,
+        model_name: str = "OpenGVLab/InternVL3_5-1B-HF",
+        device: str = "cpu",
+        dtype: str = "bfloat16",
+        attn_implementation: str = "sdpa",
+    ) -> None:
+        super().__init__(model_name=model_name, device=device)
+        self.dtype = DTYPE_MAP.get(dtype, torch.bfloat16)
+        self.attn_implementation = attn_implementation
+
+    def load(self) -> None:
+        """Load InternVL3.5-HF model and processor from HuggingFace."""
+        from transformers import AutoProcessor, AutoModelForImageTextToText
+
+        self.processor = AutoProcessor.from_pretrained(
+            self.model_name,
+            padding_side="left",
+            trust_remote_code=True,
+        )
+        self.model = AutoModelForImageTextToText.from_pretrained(
+            self.model_name,
+            dtype=self.dtype,
+            attn_implementation=self.attn_implementation,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True,
+        ).to(self.device)
+        self.model.eval()
+
+    def generate(
+        self,
+        prompt_text: str,
+        image_paths: list[str] | None = None,
+        max_new_tokens: int = 128,
+    ) -> str:
+        """Generate text using InternVL3.5-HF."""
+        pil_images = self._load_pil_images(image_paths)
+        messages = self._build_messages(prompt_text, pil_images)
+
+        text = self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        inputs = self.processor(
+            text=[text],
+            images=pil_images if pil_images else None,
+            return_tensors="pt",
+            padding=True,
+        ).to(self.device)
+
+        input_len = inputs["input_ids"].shape[1]
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=max_new_tokens,
+            )
+
+        generated_ids = output_ids[:, input_len:]
+        return self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+    def _load_pil_images(self, image_paths: list[str] | None) -> Optional[list]:
+        """Load image paths as RGB PIL Images."""
+        if not image_paths:
+            return None
+        return [Image.open(p).convert("RGB") for p in image_paths]
+
+    def _build_messages(
+        self,
+        prompt_text: str,
+        pil_images: Optional[list] = None,
+    ) -> list[dict]:
+        """Build InternVL3.5 chat messages with PIL images at <imageN> placeholders.
+
+        A system prompt forces single-letter answers.  The same instruction is
+        also appended inside the user turn because InternVL3.5 tends to ignore
+        system-only instructions when images are present.
+        """
+        INSTRUCTION = "Reply with exactly one letter — A, B, C, or D — and nothing else."
+        content = []
+        if pil_images and re.search(r'<image\d+>', prompt_text):
+            parts = re.split(r'(<image\d+>)', prompt_text)
+            for part in parts:
+                m = re.match(r'<image(\d+)>', part)
+                if m:
+                    idx = int(m.group(1)) - 1
+                    if idx < len(pil_images):
+                        content.append({"type": "image", "image": pil_images[idx]})
+                elif part.strip():
+                    content.append({"type": "text", "text": part.strip()})
+        else:
+            if pil_images:
+                for img in pil_images:
+                    content.append({"type": "image", "image": img})
+            content.append({"type": "text", "text": prompt_text})
+        content.append({"type": "text", "text": INSTRUCTION})
+        return [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant. Answer with only a single letter: A, B, C, or D. Do not explain.",
+            },
+            {"role": "user", "content": content},
+        ]
+
+    def parse_response(self, raw_output: str) -> str:
+        """Return generated text as-is (already decoded from generated tokens only)."""
+        return raw_output.strip()
+
+    def parse_answer(self, text: str, option_labels: list[str]) -> Optional[str]:
+        """Extract the answer letter, with reverse-sentence fallback."""
+        result = super().parse_answer(text, option_labels)
+        if result is not None:
+            return result
+        sentences = re.split(r'[.!?\n]', text)
+        for sentence in reversed(sentences):
+            sentence = sentence.strip()
+            for label in option_labels:
+                if re.search(rf'\b{re.escape(label)}\b', sentence, re.IGNORECASE):
+                    return label
+        return None
