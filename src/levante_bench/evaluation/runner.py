@@ -12,6 +12,19 @@ from levante_bench.models import get_model_class
 from levante_bench.tasks import get_task_dataset
 
 
+def resolve_device(device: str) -> str:
+    """Resolve auto device selection with safe CUDA -> CPU fallback."""
+    choice = (device or "auto").strip().lower()
+    if choice != "auto":
+        return choice
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
 def run_eval(cfg: DictConfig) -> dict[str, Path]:
     """Evaluate each model across all tasks using experiment config."""
     data_root = Path(cfg.data_root)

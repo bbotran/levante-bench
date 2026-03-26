@@ -238,7 +238,12 @@ def cmd_list_models(_: argparse.Namespace) -> int:
 
 
 def cmd_run_eval(args: argparse.Namespace) -> int:
+    from omegaconf import OmegaConf
+
+    from levante_bench.config import list_tasks
     from levante_bench.evaluation.runner import resolve_device, run_eval
+    from levante_bench.models import list_models
+
     task_ids = args.task if args.task else None
     model_ids = args.model if args.model else None
     version = args.version or "current"
@@ -253,20 +258,25 @@ def cmd_run_eval(args: argparse.Namespace) -> int:
         print(f"  Tasks: {', '.join(task_ids)}")
     if model_ids:
         print(f"  Models: {', '.join(model_ids)}")
-    results = run_eval(
-        task_ids=task_ids,
-        model_ids=model_ids,
-        version=version,
-        device=device,
-        output_dir=output_dir,
-        data_root=data_root,
+
+    cfg = OmegaConf.create(
+        {
+            "tasks": task_ids or list_tasks(),
+            "models": model_ids or list_models(),
+            "version": version,
+            "device": device,
+            "output_dir": str(output_dir),
+            "data_root": str(data_root),
+        }
     )
+
+    results = run_eval(cfg)
     if not results:
         print("No outputs written. Check that data/responses/<version>/ and data/assets/<version>/ exist and item_uid index matches trials.", file=sys.stderr)
         return 1
     print(f"Success: wrote {len(results)} file(s)")
-    for (task_id, model_id), path in results.items():
-        print(f"  {task_id}\t{model_id}\t{path}")
+    for model_id, path in results.items():
+        print(f"  {model_id}\t{path}")
     return 0
 
 
