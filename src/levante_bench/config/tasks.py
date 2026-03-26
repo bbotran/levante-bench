@@ -1,7 +1,5 @@
 """Task registry: LEVANTE tasks with paths and schema (manifest, human response, n_options)."""
 
-from pathlib import Path
-
 from levante_bench.config.defaults import get_data_root, get_task_mapping_path
 from levante_bench.data.schema import TaskDef
 

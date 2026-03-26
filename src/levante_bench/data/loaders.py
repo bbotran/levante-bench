@@ -1,7 +1,6 @@
 """Load manifest and human data from disk for a task."""
 
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 

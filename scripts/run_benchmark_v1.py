@@ -141,7 +141,7 @@ def main() -> None:
 
     # If max-items-math is set, create a truncated prompts file to keep row counts aligned.
     if args.max_items_math is not None:
-        prompt_lines = [l for l in math_prompts.read_text(encoding="utf-8").splitlines() if l.strip()]
+        prompt_lines = [line for line in math_prompts.read_text(encoding="utf-8").splitlines() if line.strip()]
         prompt_lines = prompt_lines[: args.max_items_math]
         math_prompts_eval.write_text("\n".join(prompt_lines) + "\n", encoding="utf-8")
     else:
@@ -178,7 +178,7 @@ def main() -> None:
     run_cmd(cmd, repo_root)
 
     # math chance baseline (overall)
-    math_prompt_rows = [json.loads(l) for l in math_prompts_eval.read_text().splitlines() if l.strip()]
+    math_prompt_rows = [json.loads(line) for line in math_prompts_eval.read_text().splitlines() if line.strip()]
     math_chance = statistics.mean(_chance_from_options(r.get("options") or []) for r in math_prompt_rows)
     math_sum = read_json(math_summary)
     math_acc = float(math_sum["accuracy_all"])
@@ -218,7 +218,7 @@ def main() -> None:
     first_variant = args.tom_variants.split(",")[0].strip()
     first_seed = args.tom_seeds.split(",")[0].strip()
     first_preds = out_tom / f"{tom_prefix}-{first_variant}-s{first_seed}-preds.jsonl"
-    uid_eval = [json.loads(l).get("item_uid") for l in first_preds.read_text().splitlines() if l.strip()]
+    uid_eval = [json.loads(line).get("item_uid") for line in first_preds.read_text().splitlines() if line.strip()]
     uid_eval = [u for u in uid_eval if u]
 
     uid_to_chance: dict[str, float] = {}
@@ -282,7 +282,11 @@ def main() -> None:
         seed_vals_second: list[float] = []
         for seed in [int(s.strip()) for s in args.tom_seeds.split(",") if s.strip()]:
             preds_path = out_tom / f"{tom_prefix}-{variant}-s{seed}-preds.jsonl"
-            preds = [json.loads(l) for l in preds_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+            preds = [
+                json.loads(pred_line)
+                for pred_line in preds_path.read_text(encoding="utf-8").splitlines()
+                if pred_line.strip()
+            ]
             by_uid = {p.get("item_uid"): p for p in preds if p.get("item_uid")}
             vals = [1.0 if by_uid[u].get("correct") else 0.0 for u in memcrit_uids if u in by_uid]
             vals2 = [1.0 if by_uid[u].get("correct") else 0.0 for u in second_order_uids if u in by_uid]

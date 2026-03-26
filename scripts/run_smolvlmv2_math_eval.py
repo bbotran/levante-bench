@@ -81,9 +81,36 @@ def _extract_letter(text: str, n_options: int) -> str | None:
 def _messages_for_record(rec: dict[str, Any]) -> list[dict[str, Any]]:
     messages = rec.get("messages")
     if isinstance(messages, list) and messages:
+        # If this record has images, ensure the user content includes matching image placeholders.
+        image_paths = rec.get("image_paths") or []
+        if isinstance(image_paths, list) and image_paths:
+            out = []
+            for msg in messages:
+                if not isinstance(msg, dict):
+                    out.append(msg)
+                    continue
+                if msg.get("role") != "user":
+                    out.append(msg)
+                    continue
+                content = msg.get("content")
+                if not isinstance(content, list):
+                    out.append(msg)
+                    continue
+                has_image_token = any(isinstance(c, dict) and c.get("type") == "image" for c in content)
+                if has_image_token:
+                    out.append(msg)
+                    continue
+                new_content = [{"type": "image"} for _ in image_paths] + content
+                out.append({"role": "user", "content": new_content})
+            return out
         return messages
     prompt_text = rec.get("prompt_text", "")
-    return [{"role": "user", "content": [{"type": "text", "text": str(prompt_text)}]}]
+    content: list[dict[str, str]] = []
+    image_paths = rec.get("image_paths") or []
+    if isinstance(image_paths, list) and image_paths:
+        content.extend([{"type": "image"} for _ in image_paths])
+    content.append({"type": "text", "text": str(prompt_text)})
+    return [{"role": "user", "content": content}]
 
 
 def _load_model(model_id: str, device: str, trust_remote_code: bool):
@@ -120,10 +147,21 @@ def _generate_one(
     max_new_tokens: int,
 ) -> str:
     import torch
+    from PIL import Image
 
     messages = _messages_for_record(rec)
     prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-    inputs = processor(text=prompt, return_tensors="pt")
+    image_paths = rec.get("image_paths") or []
+    images = None
+    if isinstance(image_paths, list) and image_paths:
+        loaded = []
+        for p in image_paths:
+            path = Path(str(p))
+            if path.exists():
+                loaded.append(Image.open(path).convert("RGB"))
+        if loaded:
+            images = loaded
+    inputs = processor(text=prompt, images=images, return_tensors="pt")
     if device in ("cpu", "cuda"):
         inputs = {k: v.to(device) for k, v in inputs.items()}
     with torch.no_grad():
