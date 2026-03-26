@@ -10,7 +10,6 @@ import random
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
 
 
 def parse_args() -> argparse.Namespace:

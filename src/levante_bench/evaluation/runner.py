@@ -72,7 +72,6 @@ def run_eval(
             shuffle=False,
             collate_fn=collate_levante,
         )
-        n_trials = len(dataset)
         for model_id in model_ids:
             model_cls = get_model_class(model_id)
             if not model_cls:
