@@ -1,26 +1,24 @@
-"""CLI: run-eval, list-tasks, list-models, run-comparison."""
+"""CLI: run-eval, run-benchmark, run-workflow, run-comparison."""
 
 import argparse
-import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
-
-WORKFLOW_SCRIPTS = {
-    "benchmark-v1": "run_benchmark_v1.py",
-    "smol-math": "run_smolvlmv2_math_eval.py",
-    "smol-tom": "run_smolvlmv2_tom_eval.py",
-    "smol-vocab": "run_smolvlmv2_vocab_eval.py",
-    "tom-modal": "run_tom_modal_eval.py",
-    "tom-robustness": "run_tom_robustness.py",
-}
-
-DEFAULT_SMOLVLM2_MODEL = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
+from levante_bench.cli_workflows import (
+    DEFAULT_DATA_VERSION,
+    DEFAULT_SMOLVLM2_MODEL,
+    WORKFLOW_SCRIPTS,
+    benchmark_command,
+    normalize_passthrough,
+    project_root,
+    run_command,
+    workflow_command,
+    workflow_script_path,
+)
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+    return project_root()
 
 
 def cmd_list_tasks(_: argparse.Namespace) -> int:
@@ -87,17 +85,13 @@ def cmd_check_gpu(_: argparse.Namespace) -> int:
 
 def cmd_run_workflow(args: argparse.Namespace) -> int:
     root = _project_root()
-    script_name = WORKFLOW_SCRIPTS[args.workflow]
-    script_path = root / "scripts" / script_name
+    script_path = workflow_script_path(root, args.workflow)
     if not script_path.exists():
         print(f"Workflow script not found: {script_path}", file=sys.stderr)
         return 1
-    passthrough = args.script_args or []
-    if passthrough and passthrough[0] == "--":
-        passthrough = passthrough[1:]
-    cmd = [sys.executable, str(script_path), *passthrough]
+    cmd = workflow_command(root, args.workflow, args.script_args)
     print("Running workflow:", " ".join(cmd))
-    return subprocess.run(cmd, cwd=str(root)).returncode
+    return run_command(cmd, cwd=root)
 
 
 def cmd_run_benchmark(args: argparse.Namespace) -> int:
@@ -105,58 +99,27 @@ def cmd_run_benchmark(args: argparse.Namespace) -> int:
 
     root = _project_root()
     device = resolve_device(args.device)
-    data_version = args.data_version or "2026-03-24"
+    data_version = args.data_version or DEFAULT_DATA_VERSION
     model_id = args.model_id or DEFAULT_SMOLVLM2_MODEL
 
-    if args.benchmark == "v1":
-        cmd = [
-            sys.executable,
-            str(root / "scripts" / "run_benchmark_v1.py"),
-            "--data-version",
-            data_version,
-            "--device",
-            device,
-            "--model-id",
-            model_id,
-        ]
-        if args.max_items_math is not None:
-            cmd.extend(["--max-items-math", str(args.max_items_math)])
-        if args.max_items_tom is not None:
-            cmd.extend(["--max-items-tom", str(args.max_items_tom)])
-    elif args.benchmark == "vocab":
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        out_dir = root / "results" / "benchmark" / "vocab" / ts
-        out_dir.mkdir(parents=True, exist_ok=True)
-        cmd = [
-            sys.executable,
-            str(root / "scripts" / "run_smolvlmv2_vocab_eval.py"),
-            "--corpus-csv",
-            str(root / "data" / "assets" / data_version / "corpus" / "vocab" / "vocab-item-bank.csv"),
-            "--visual-dir",
-            str(root / "data" / "assets" / data_version / "visual" / "vocab"),
-            "--output-jsonl",
-            str(out_dir / "vocab-preds.jsonl"),
-            "--summary-json",
-            str(out_dir / "vocab-summary.json"),
-            "--composite-dir",
-            str(out_dir / "vocab-composites"),
-            "--device",
-            device,
-            "--model-id",
-            model_id,
-        ]
-        if args.max_items_vocab is not None:
-            cmd.extend(["--max-items", str(args.max_items_vocab)])
-    else:
-        print(f"Unknown benchmark: {args.benchmark}", file=sys.stderr)
+    try:
+        cmd = benchmark_command(
+            root=root,
+            benchmark=args.benchmark,
+            data_version=data_version,
+            model_id=model_id,
+            device=device,
+            max_items_math=args.max_items_math,
+            max_items_tom=args.max_items_tom,
+            max_items_vocab=args.max_items_vocab,
+            extra_args=normalize_passthrough(args.benchmark_args),
+        )
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
         return 1
 
-    extra = args.benchmark_args or []
-    if extra and extra[0] == "--":
-        extra = extra[1:]
-    cmd.extend(extra)
     print("Running benchmark:", " ".join(cmd))
-    return subprocess.run(cmd, cwd=str(root)).returncode
+    return run_command(cmd, cwd=root)
 
 
 def cmd_run_comparison(args: argparse.Namespace) -> int:
@@ -182,27 +145,31 @@ def cmd_run_comparison(args: argparse.Namespace) -> int:
         cmd.extend(["--output-dkl", args.output_dkl])
     if getattr(args, "output_accuracy", None):
         cmd.extend(["--output-accuracy", args.output_accuracy])
-    r = subprocess.run(cmd, cwd=str(root))
-    return r.returncode
+    return run_command(cmd, cwd=root)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(prog="levante-bench", description="LEVANTE VLM benchmark")
-    sub = parser.add_subparsers(dest="command", required=True)
-    # list-tasks
+def add_list_tasks_parser(sub: argparse._SubParsersAction) -> None:
     sub.add_parser("list-tasks", help="List registered task IDs")
-    # list-models
+
+
+def add_list_models_parser(sub: argparse._SubParsersAction) -> None:
     sub.add_parser("list-models", help="List registered model IDs")
-    # check-gpu
+
+
+def add_check_gpu_parser(sub: argparse._SubParsersAction) -> None:
     sub.add_parser("check-gpu", help="Report local CUDA/GPU availability")
-    # run-eval
+
+
+def add_run_eval_parser(sub: argparse._SubParsersAction) -> None:
     pe = sub.add_parser("run-eval", help="Run evaluation (write .npy per task/model)")
     pe.add_argument("--task", action="append", help="Task ID (repeat for multiple)")
     pe.add_argument("--model", action="append", help="Model ID (repeat for multiple)")
     pe.add_argument("--version", default="current", help="Data/asset version")
     pe.add_argument("--device", default="auto", help="Device for model: auto|cpu|cuda")
     pe.add_argument("--output-dir", help="Output directory (default: results/<version>)")
-    # run-workflow
+
+
+def add_run_workflow_parser(sub: argparse._SubParsersAction) -> None:
     pw = sub.add_parser("run-workflow", help="Run integrated benchmark/test workflow scripts")
     pw.add_argument("--workflow", required=True, choices=sorted(WORKFLOW_SCRIPTS.keys()))
     pw.add_argument(
@@ -210,10 +177,12 @@ def main() -> int:
         nargs=argparse.REMAINDER,
         help="Arguments passed through to the workflow script (prefix with --).",
     )
-    # run-benchmark
+
+
+def add_run_benchmark_parser(sub: argparse._SubParsersAction) -> None:
     pb = sub.add_parser("run-benchmark", help="Run integrated benchmark presets (v1, vocab)")
     pb.add_argument("--benchmark", required=True, choices=["v1", "vocab"])
-    pb.add_argument("--data-version", default="2026-03-24", help="Data/assets version")
+    pb.add_argument("--data-version", default=DEFAULT_DATA_VERSION, help="Data/assets version")
     pb.add_argument("--model-id", default=DEFAULT_SMOLVLM2_MODEL, help="Model id")
     pb.add_argument("--device", default="auto", help="Device: auto|cpu|cuda")
     pb.add_argument("--max-items-math", type=int, default=None, help="Optional cap for v1 math")
@@ -224,7 +193,9 @@ def main() -> int:
         nargs=argparse.REMAINDER,
         help="Extra args forwarded to the underlying benchmark script (prefix with --).",
     )
-    # run-comparison
+
+
+def add_run_comparison_parser(sub: argparse._SubParsersAction) -> None:
     pc = sub.add_parser("run-comparison", help="Run R comparison (D_KL by age+item_uid, accuracy by item_uid)")
     pc.add_argument("--task", required=True, help="Task ID")
     pc.add_argument("--model", required=True, help="Model ID")
@@ -233,6 +204,18 @@ def main() -> int:
     pc.add_argument("--output-dir", default="results/comparison", help="Directory for D_KL and accuracy CSVs")
     pc.add_argument("--output-dkl", help="Output path for D_KL CSV (default: <output-dir>/<task>_<model>_d_kl.csv)")
     pc.add_argument("--output-accuracy", help="Output path for accuracy CSV (default: <output-dir>/<task>_<model>_accuracy.csv)")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="levante-bench", description="LEVANTE VLM benchmark")
+    sub = parser.add_subparsers(dest="command", required=True)
+    add_list_tasks_parser(sub)
+    add_list_models_parser(sub)
+    add_check_gpu_parser(sub)
+    add_run_eval_parser(sub)
+    add_run_workflow_parser(sub)
+    add_run_benchmark_parser(sub)
+    add_run_comparison_parser(sub)
     args = parser.parse_args()
     if args.command == "list-tasks":
         return cmd_list_tasks(args)
