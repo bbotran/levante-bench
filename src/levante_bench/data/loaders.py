@@ -18,6 +18,27 @@ def _safe_task_id(task_id: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", task_id)
 
 
+def _normalize_option_str(val) -> str:
+    """Normalize a canonical option value to a clean, matchable string.
+
+    Handles the common case where pandas promotes numeric columns to float
+    (e.g., ``12.0``) when NaN sentinels are present in the same column.
+    Integer-valued floats are reduced to plain integer strings (``"12"``).
+    True NaN/None values become empty string (treated as absent option slot).
+    """
+    if pd.isna(val):
+        return ""
+    s = str(val).strip()
+    # "12.0" → "12"  (only strips trailing .0 when the prefix is a plain integer)
+    try:
+        f = float(s)
+        if f == int(f):
+            s = str(int(f))
+    except (ValueError, OverflowError):
+        pass
+    return s
+
+
 def load_human_proportions(
     proportions_path: Path,
     option_key_path: Optional[Path] = None,
@@ -58,10 +79,7 @@ def load_human_proportions(
         key_df = pd.read_csv(option_key_path)
         for _, row in key_df.iterrows():
             uid = str(row["item_uid"]).strip()
-            opts = [
-                "" if pd.isna(row.get(col)) else str(row[col]).strip()
-                for col in image_cols
-            ]
+            opts = [_normalize_option_str(row.get(col)) for col in image_cols]
             key_index[uid] = opts
 
     result: dict[str, dict] = {}
