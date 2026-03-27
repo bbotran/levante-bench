@@ -82,6 +82,11 @@ def parse_args() -> argparse.Namespace:
             "'minimal' gives compact guidance; 'stepwise' gives a short procedure."
         ),
     )
+    p.add_argument(
+        "--numbers-as-words",
+        action="store_true",
+        help="Convert standalone integer numerals in prompts/options to words.",
+    )
     p.add_argument("--seed", type=int, default=0, help="Random seed when --shuffle-options is used")
     return p.parse_args()
 
@@ -192,17 +197,40 @@ def _numberline_interpretation_text(style: str) -> str:
     )
 
 
+def _numbers_to_words(text: str) -> str:
+    if not text:
+        return text
+    try:
+        from num2words import num2words
+    except Exception:
+        return text
+
+    def repl(match: re.Match[str]) -> str:
+        token = match.group(0)
+        try:
+            return str(num2words(int(token)))
+        except Exception:
+            return token
+
+    return re.sub(r"\b\d+\b", repl, text)
+
+
 def _build_prompt_text(
     row: dict[str, str],
     options: list[str],
     numberline_hint: str,
     has_numberline_image: bool,
     numberline_instruction_style: str,
+    numbers_as_words: bool,
 ) -> str:
     trial_type = (row.get("trial_type") or "").strip()
     stem = (row.get("prompt") or "").strip()
     item = (row.get("item") or "").strip()
     item_uid = (row.get("item_uid") or "").strip()
+    if numbers_as_words:
+        stem = _numbers_to_words(stem)
+        item = _numbers_to_words(item)
+        options = [_numbers_to_words(opt) for opt in options]
 
     lines = [
         "Solve this multiple-choice math problem.",
@@ -235,9 +263,13 @@ def _record_from_row(
     numberline_hint: str,
     numberline_index: dict[tuple[int, int], Path],
     numberline_instruction_style: str,
+    numbers_as_words: bool,
 ) -> dict[str, object] | None:
     answer = (row.get("answer") or "").strip()
     distractors = _split_alternatives((row.get("response_alternatives") or "").strip())
+    if numbers_as_words:
+        answer = _numbers_to_words(answer)
+        distractors = [_numbers_to_words(d) for d in distractors]
     options = [answer] + [d for d in distractors if d != answer]
     if len(options) < 2:
         return None
@@ -262,6 +294,7 @@ def _record_from_row(
         numberline_hint=numberline_hint,
         has_numberline_image=numberline_image is not None,
         numberline_instruction_style=numberline_instruction_style,
+        numbers_as_words=numbers_as_words,
     )
 
     return {
@@ -313,6 +346,7 @@ def run(args: argparse.Namespace) -> tuple[int, int]:
                 numberline_hint=args.numberline_hint,
                 numberline_index=numberline_index,
                 numberline_instruction_style=args.numberline_instruction_style,
+                numbers_as_words=args.numbers_as_words,
             )
             if rec is None:
                 skipped += 1
