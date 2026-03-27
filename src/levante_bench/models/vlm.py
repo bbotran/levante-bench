@@ -79,8 +79,6 @@ class SmolVLM2Model(VLMModel):
         """Build SmolVLM2 chat messages, interleaving images at <imageN> placeholders."""
         content = []
         if image_paths and re.search(r'<image\d+>', prompt_text):
-            # Split prompt on <imageN> placeholders and interleave with images
-            labels = ["A", "B", "C", "D", "E", "F", "G", "H"]
             parts = re.split(r'(<image\d+>)', prompt_text)
             has_image0 = "<image0>" in prompt_text
             for part in parts:
@@ -92,11 +90,6 @@ class SmolVLM2Model(VLMModel):
                     # Otherwise, keep the existing 1-based convention (<image1> -> image_paths[0]).
                     idx = n if has_image0 else n - 1
                     if idx < len(image_paths):
-                        # <image0> is reserved for a "prompt/context" image (no label prefix).
-                        if n != 0:
-                            label_idx = n - 1
-                            label = labels[label_idx] if label_idx < len(labels) else str(label_idx + 1)
-                            content.append({"type": "text", "text": f"{label}:"})
                         content.append({"type": "image", "url": str(Path(image_paths[idx]).resolve())})
                 elif part.strip():
                     content.append({"type": "text", "text": part.strip()})
@@ -206,10 +199,13 @@ class Qwen35Model(VLMModel):
         content = []
         if pil_images and re.search(r'<image\d+>', prompt_text):
             parts = re.split(r'(<image\d+>)', prompt_text)
+            has_image0 = "<image0>" in prompt_text
             for part in parts:
                 m = re.match(r'<image(\d+)>', part)
                 if m:
-                    idx = int(m.group(1)) - 1
+                    n = int(m.group(1))
+                    # Support prompts that explicitly include a context image as <image0>.
+                    idx = n if has_image0 else n - 1
                     if idx < len(pil_images):
                         content.append({"type": "image", "image": pil_images[idx]})
                 elif part.strip():
@@ -344,10 +340,13 @@ class InternVL35Model(VLMModel):
         content = []
         if pil_images and re.search(r'<image\d+>', prompt_text):
             parts = re.split(r'(<image\d+>)', prompt_text)
+            has_image0 = "<image0>" in prompt_text
             for part in parts:
                 m = re.match(r'<image(\d+)>', part)
                 if m:
-                    idx = int(m.group(1)) - 1
+                    n = int(m.group(1))
+                    # Support prompts that explicitly include a context image as <image0>.
+                    idx = n if has_image0 else n - 1
                     if idx < len(pil_images):
                         content.append({"type": "image", "image": pil_images[idx]})
                 elif part.strip():
