@@ -136,7 +136,14 @@ def main():
     print_table(df)
 
     if not args.no_plot:
-        output_path = Path(args.output) if args.output else results_dir / "heatmap.png"
+        if args.output:
+            output_path = Path(args.output)
+        elif args.version:
+            output_path = results_dir / args.version / "heatmap.png"
+        else:
+            # Use first version dir found
+            versions = [d.name for d in sorted(results_dir.iterdir()) if d.is_dir()]
+            output_path = results_dir / versions[0] / "heatmap.png" if versions else results_dir / "heatmap.png"
         plot_heatmap(df, output_path)
 
     return 0
