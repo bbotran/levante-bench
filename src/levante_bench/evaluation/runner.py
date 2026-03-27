@@ -7,6 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from levante_bench.config import get_task_def, load_model_config, load_task_config
 from levante_bench.data.loaders import load_human_proportions
+from levante_bench.evaluation.adapters import postprocess_task_outputs
 from levante_bench.evaluation.cache import load_cache, save_cache, trial_hash
 from levante_bench.evaluation.human_comparison import annotate_human_metrics
 from levante_bench.evaluation.outputs import write_task_csv, write_summary_csv
@@ -99,10 +100,12 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
 
             # Evaluate each trial
             task_results = []
+            task_trials = []
             max_new_tokens = model_cfg.get("max_new_tokens", 64)
 
             for i in range(len(dataset)):
                 trial = dataset[i]
+                task_trials.append(trial)
                 trial["max_new_tokens"] = max_new_tokens
                 h = trial_hash(trial)
 
@@ -124,6 +127,14 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
 
             # Write per-task CSV
             write_task_csv(model_dir, task_id, task_results)
+            post_paths = postprocess_task_outputs(
+                task_id=task_id,
+                model_dir=model_dir,
+                task_results=task_results,
+                task_trials=task_trials,
+            )
+            for out_path in post_paths:
+                print(f"  {model_name}/{task_id}: wrote {out_path}")
 
             # Compute accuracy
             correct = sum(1 for r in task_results if r["is_correct"])
