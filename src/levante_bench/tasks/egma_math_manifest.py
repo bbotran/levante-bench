@@ -77,6 +77,7 @@ class EgmaMathDataset(VLMDataset):
         return {
             "trial_id": row["item_uid"],
             "item_uid": row["item_uid"],
+            "trial_type": str(row.get("trial_type", "")).strip(),
             "prompt": prompt,
             "options": all_options,
             "option_labels": LABELS[:len(all_options)],
