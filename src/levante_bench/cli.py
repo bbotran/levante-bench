@@ -46,8 +46,22 @@ def _run_experiment_style_args(cli_args: list[str]) -> int:
         return 1
 
     cfg = load_experiment(experiment_path=experiment_path, cli_overrides=overrides)
+
+    # If models are dicts (new format), go directly to run_eval
+    models_raw = cfg.get("models") or []
+    has_dict_models = any(not isinstance(m, str) for m in models_raw)
+    if has_dict_models:
+        from levante_bench.evaluation.runner import run_eval
+        results = run_eval(cfg)
+        if not results:
+            print("No results produced.", file=sys.stderr)
+            return 1
+        for model_id, path in results.items():
+            print(f"  {model_id}: {path}")
+        return 0
+
     tasks = [str(t) for t in (cfg.get("tasks") or [])]
-    models = [str(m) for m in (cfg.get("models") or [])]
+    models = [str(m) for m in models_raw]
     version = str(cfg.get("version") or "current")
     device = resolve_device(str(cfg.get("device") or "auto"))
     output_dir = str(cfg.get("output_dir") or "results")

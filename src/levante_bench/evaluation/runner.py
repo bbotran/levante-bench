@@ -38,14 +38,28 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
     device = cfg.get("device", "cpu")
     results = {}
 
-    for model_name in cfg.models:
-        model_cfg = load_model_config(model_name)
-        if model_cfg is None:
+    for model_entry in cfg.models:
+        # Support both string ("smolvlm2") and dict ({"name": "smolvlm2", "size": "2.2B"})
+        if isinstance(model_entry, str):
+            model_name = model_entry
+            model_overrides = {}
+        else:
+            model_entry = OmegaConf.to_container(model_entry, resolve=True)
+            model_name = model_entry.pop("name")
+            model_overrides = model_entry
+
+        base_cfg = load_model_config(model_name)
+        if base_cfg is None:
             print(f"  Skip model {model_name}: no config found", file=sys.stderr)
             continue
 
-        # Resolve model config (handles ${size} interpolation etc.)
-        model_cfg = OmegaConf.to_container(model_cfg, resolve=True)
+        # Merge experiment overrides into base model config, then resolve
+        model_cfg = OmegaConf.to_container(base_cfg, resolve=False)
+        model_cfg.update(model_overrides)
+        model_cfg = OmegaConf.to_container(OmegaConf.create(model_cfg), resolve=True)
+
+        size = model_cfg.get("size", "")
+        model_label = f"{model_name}_{size}" if size else model_name
 
         # Load model once for all tasks
         model_cls = get_model_class(model_name)
@@ -54,9 +68,10 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
             continue
 
         model = model_cls(model_name=model_cfg["hf_name"], device=device)
+        model.use_json_format = model_cfg.get("use_json_format", True)
         model.load()
 
-        model_dir = output_base / model_name / version
+        model_dir = output_base / version / model_label
         cache_path = model_dir / "cache" / "responses.json"
         cache = load_cache(cache_path)
         task_accuracies = {}

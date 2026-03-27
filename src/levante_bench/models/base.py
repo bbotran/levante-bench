@@ -21,6 +21,7 @@ class VLMModel:
         self.device = device
         self.model = None
         self.processor = None
+        self.use_json_format = True
 
     def load(self) -> None:
         """Load model and processor onto device."""
@@ -49,7 +50,9 @@ class VLMModel:
 
     def evaluate_trial(self, trial: dict) -> dict:
         """Run a single trial: generate answer, parse it, return result."""
-        prompt = trial["prompt"] + ANSWER_FORMAT_INSTRUCTION
+        prompt = trial["prompt"]
+        if self.use_json_format:
+            prompt += ANSWER_FORMAT_INSTRUCTION
         image_paths = trial.get("context_image_paths", []) + trial.get("option_image_paths", [])
         raw_output = self.generate(
             prompt_text=prompt,
