@@ -1,6 +1,8 @@
 """EgmaMath dataset. Context: optional image, options: text."""
 
+import csv
 import random
+import re
 
 from pathlib import Path
 
@@ -11,6 +13,20 @@ from levante_bench.tasks.registry import register_task
 from levante_bench.tasks.image_index import build_image_index
 
 LABELS = ["A", "B", "C", "D"]
+
+
+def _is_numberline_trial(trial_type: str) -> bool:
+    return "number line" in trial_type.strip().lower()
+
+
+def _numberline_instruction() -> str:
+    return (
+        "Use the number line graphic to answer this item. "
+        "Read the left and right endpoint labels on the line to determine the scale, "
+        "then locate the marked position and choose the matching value."
+    )
+
+
 @register_task("egma-math")
 class EgmaMathDataset(VLMDataset):
     """Reads egma-math trials from manifest.csv with text answer choices."""
@@ -19,15 +35,141 @@ class EgmaMathDataset(VLMDataset):
         super().__init__(task_def=task_def, version=version, data_root=data_root)
         self.manifest = self._load_manifest()
         self.image_dir = self.data_root / "assets" / self.version / "visual" / "egma-math"
-        self.image_index = build_image_index(self.image_dir)
+        self.image_index = self._build_combined_image_index()
+        self.item_id_by_uid = self._build_item_id_map()
+
+    def _build_combined_image_index(self) -> dict[str, Path]:
+        index: dict[str, Path] = {}
+        if self.image_dir.exists():
+            index.update(build_image_index(self.image_dir))
+
+        # Optional local graphics bundle for number line items.
+        project_root = Path(self.data_root).parent
+        extra_dirs = [
+            project_root / "local_data" / "numberline-graphics" / "egma-math",
+            project_root / "local_data" / "numberline_graphics" / "egma-math",
+        ]
+        for d in extra_dirs:
+            if d.exists():
+                index.update(build_image_index(d))
+        return index
+
+    def _build_item_id_map(self) -> dict[str, str]:
+        corpus_file = str(self.task_def.corpus_file or "test-combined-math-cat.csv")
+        path = (
+            Path(self.data_root)
+            / "assets"
+            / self.version
+            / "corpus"
+            / "egma-math"
+            / corpus_file
+        )
+        if not path.exists():
+            return {}
+        out: dict[str, str] = {}
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                uid = str(row.get("item_uid", "")).strip()
+                iid = str(row.get("item_id", "")).strip()
+                if uid and iid:
+                    out[uid] = iid
+        return out
+
+    def _numberline_image_candidates(self, item_uid: str, item_id: str | None = None) -> list[str]:
+        candidates = [item_uid]
+        m = re.match(r"^math_(line|slider)_(.+)$", item_uid)
+        if m:
+            suffix = m.group(2)
+            kind = m.group(1)
+            other_kind = "slider" if kind == "line" else "line"
+            suffix_hyphen = suffix.replace("_", "-")
+            candidates.extend(
+                [
+                    # math_* forms
+                    f"math_{kind}_{suffix}",
+                    f"math_{other_kind}_{suffix}",
+                    f"math-{kind}-{suffix_hyphen}",
+                    f"math-{other_kind}-{suffix_hyphen}",
+                    # bare kind forms
+                    f"{kind}_{suffix}",
+                    f"{other_kind}_{suffix}",
+                    f"{kind}-{suffix_hyphen}",
+                    f"{other_kind}-{suffix_hyphen}",
+                    # raw suffix
+                    suffix,
+                    suffix_hyphen,
+                ]
+            )
+
+            # Handle decimal-style suffixes like 045_1 => 0-45-1.
+            dm = re.match(r"^0([0-9]+)_1$", suffix)
+            if dm:
+                frac = dm.group(1).lstrip("0") or "0"
+                candidates.extend(
+                    [
+                        f"{kind}-0-{frac}-1",
+                        f"{other_kind}-0-{frac}-1",
+                        f"math-{kind}-0-{frac}-1",
+                        f"math-{other_kind}-0-{frac}-1",
+                        f"math_{kind}_0{frac}_1",
+                        f"math_{other_kind}_0{frac}_1",
+                    ]
+                )
+
+        # Also derive from corpus item_id if available (e.g., line2num-639-1000).
+        if item_id:
+            candidates.extend([item_id, item_id.replace(".", "_"), item_id.replace(".", "-")])
+            im = re.match(r"^(?:line2num|slider)-(.+)-([0-9]+)$", item_id)
+            if im:
+                value = im.group(1)
+                scale = im.group(2)
+                value_clean = value.replace(".", "")
+                candidates.extend(
+                    [
+                        f"math_line_{value_clean}_{scale}",
+                        f"math_slider_{value_clean}_{scale}",
+                        f"line-{value}-{scale}",
+                        f"slider-{value}-{scale}",
+                        f"line-{value_clean}-{scale}",
+                        f"slider-{value_clean}-{scale}",
+                    ]
+                )
+
+        # Asset bundle often prefixes filenames with task slug.
+        prefixed = []
+        for c in candidates:
+            prefixed.append(f"egma-math-{c}")
+            prefixed.append(f"egma_math-{c}")
+        candidates.extend(prefixed)
+        return candidates
+
+    def _resolve_prompt_image(self, row: pd.Series, is_numberline: bool) -> Path | None:
+        prompt_image = str(row.get("prompt_image", "NA")).strip()
+        invalid = {"", "NA", "nan", "TODO"}
+        if prompt_image not in invalid:
+            path = self.image_index.get(prompt_image)
+            if path is not None:
+                return path
+
+        if is_numberline:
+            item_uid = str(row.get("item_uid", "")).strip()
+            item_id = self.item_id_by_uid.get(item_uid)
+            for key in self._numberline_image_candidates(item_uid, item_id=item_id):
+                path = self.image_index.get(key)
+                if path is not None:
+                    return path
+        return None
 
     def _load_manifest(self) -> pd.DataFrame:
         """Load and filter manifest rows for egma-math task."""
         manifest_path = self.data_root / "assets" / "manifest.csv"
         df = pd.read_csv(manifest_path)
         df = df[df["task"] == "egma-math"]
-        # Number line items are not fully supported yet (see manifest notes).
-        df = df[~df["trial_type"].astype(str).str.contains("Number Line", case=False, na=False)]
+        include_numberline = bool(getattr(self.task_def, "include_numberline", False))
+        if not include_numberline:
+            # Number line items are optional in runner path; default remains excluded.
+            df = df[~df["trial_type"].astype(str).str.contains("Number Line", case=False, na=False)]
         return df.reset_index(drop=True)
 
     def __len__(self):
@@ -35,6 +177,8 @@ class EgmaMathDataset(VLMDataset):
 
     def __getitem__(self, idx):
         row = self.manifest.iloc[idx]
+        trial_type = str(row.get("trial_type", "")).strip()
+        is_numberline = _is_numberline_trial(trial_type)
 
         answer = str(row["answer"]).strip()
         alternatives = str(row["response_alternatives"] or "").split(",")
@@ -58,17 +202,30 @@ class EgmaMathDataset(VLMDataset):
         prompt = str(row["full_prompt"])
 
         context_image_paths = []
-        if "<prompt_image>" in prompt:
-            prompt = prompt.replace("<prompt_image>", "<image0>")
-            prompt_image = str(row.get("prompt_image", "NA")).strip()
-            if prompt_image and prompt_image not in {"NA", "nan", "TODO"}:
-                path = self.image_index.get(prompt_image)
-                if path is None:
-                    raise FileNotFoundError(
-                        f"Prompt image not found for '{prompt_image}' in {self.image_dir} "
-                        f"(trial {row['item_uid']})"
-                    )
+        if is_numberline and bool(getattr(self.task_def, "include_numberline", False)):
+            path = self._resolve_prompt_image(row=row, is_numberline=True)
+            if path is not None:
+                if "<prompt_image>" in prompt:
+                    prompt = prompt.replace("<prompt_image>", "<image0>")
+                else:
+                    prompt = f"<image0>\n{prompt}"
                 context_image_paths.append(str(path))
+            elif "<prompt_image>" in prompt:
+                prompt = prompt.replace("<prompt_image>", "")
+        elif "<prompt_image>" in prompt:
+            path = self._resolve_prompt_image(row=row, is_numberline=False)
+            if path is not None:
+                prompt = prompt.replace("<prompt_image>", "<image0>")
+                context_image_paths.append(str(path))
+            else:
+                prompt_image = str(row.get("prompt_image", "NA")).strip()
+                raise FileNotFoundError(
+                    f"Prompt image not found for '{prompt_image}' in {self.image_dir} "
+                    f"(trial {row['item_uid']})"
+                )
+
+        if is_numberline and bool(getattr(self.task_def, "include_numberline", False)):
+            prompt = f"{_numberline_instruction()}\n{prompt}"
 
         prompt = prompt.replace("<prompt_phrase>", prompt_phrase_s)
         for i, option in enumerate(all_options, start=1):
@@ -77,7 +234,7 @@ class EgmaMathDataset(VLMDataset):
         return {
             "trial_id": row["item_uid"],
             "item_uid": row["item_uid"],
-            "trial_type": str(row.get("trial_type", "")).strip(),
+            "trial_type": trial_type,
             "prompt": prompt,
             "options": all_options,
             "option_labels": LABELS[:len(all_options)],

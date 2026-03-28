@@ -27,6 +27,7 @@ class TaskDef:
     corpus_file: Optional[str] = None  # corpus CSV filename in bucket
     context_type: str = "none"  # "none" | "single_image" | "multi_image"
     option_type: str = "text"  # "text" | "image"
+    include_numberline: bool = False  # egma-math manifest: include Number Line rows
 
 
 # --- Trial (one row from trials table / manifest) ---

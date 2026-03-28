@@ -36,6 +36,10 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
     version = cfg.get("version", "current")
     output_base = Path(cfg.get("output_dir", "results"))
     device = cfg.get("device", "cpu")
+    task_overrides_cfg = cfg.get("task_overrides") or {}
+    task_overrides = OmegaConf.to_container(task_overrides_cfg, resolve=True) if isinstance(task_overrides_cfg, DictConfig) else task_overrides_cfg
+    if not isinstance(task_overrides, dict):
+        task_overrides = {}
     results = {}
 
     for model_entry in cfg.models:
@@ -90,7 +94,8 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
                 continue
 
             # Load task dataset
-            task_def = get_task_def(task_id, version, data_root=data_root)
+            overrides = task_overrides.get(task_id, {}) if isinstance(task_overrides, dict) else {}
+            task_def = get_task_def(task_id, version, data_root=data_root, task_overrides=overrides)
             if task_def is None:
                 print(f"  Skip {task_id}: no task def for version={version}", file=sys.stderr)
                 continue

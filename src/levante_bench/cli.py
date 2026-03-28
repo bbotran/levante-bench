@@ -272,6 +272,8 @@ def cmd_run_eval(args: argparse.Namespace) -> int:
         print(f"  Tasks: {', '.join(task_ids)}")
     if model_ids:
         print(f"  Models: {', '.join(model_ids)}")
+    if args.include_numberline:
+        print("  Egma-math override: include Number Line items")
 
     cfg = OmegaConf.create(
         {
@@ -281,6 +283,9 @@ def cmd_run_eval(args: argparse.Namespace) -> int:
             "device": device,
             "output_dir": str(output_dir),
             "data_root": str(data_root),
+            "task_overrides": {
+                "egma-math": {"include_numberline": bool(args.include_numberline)},
+            },
         }
     )
 
@@ -393,6 +398,11 @@ def add_run_eval_parser(sub: argparse._SubParsersAction) -> None:
     pe.add_argument("--version", default="current", help="Data/asset version")
     pe.add_argument("--device", default="auto", help="Device for model: auto|cpu|cuda")
     pe.add_argument("--output-dir", help="Output directory (default: results/<version>)")
+    pe.add_argument(
+        "--include-numberline",
+        action="store_true",
+        help="For egma-math in runner path, include Number Line trial types from manifest.",
+    )
 
 
 def add_run_workflow_parser(sub: argparse._SubParsersAction) -> None:
