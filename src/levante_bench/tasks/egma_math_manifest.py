@@ -13,6 +13,12 @@ from levante_bench.tasks.registry import register_task
 from levante_bench.tasks.image_index import build_image_index
 
 LABELS = ["A", "B", "C", "D"]
+NUMBERLINE_CORPUS_INSTRUCTION = (
+    "Here is a number line. "
+    "You can move the slider forward and backward along the line. "
+    "Move the slider so it is in the right place to show where the number would fit. "
+    "Make sure you look at the numbers at each end when deciding where to move the slider."
+)
 
 
 def _is_numberline_trial(trial_type: str) -> bool:
@@ -25,24 +31,30 @@ def _is_numberline_slider_trial(trial_type: str) -> bool:
 
 def _numberline_instruction() -> str:
     return (
-        "Use only the number line graphic to answer this item. "
-        "Read the left and right endpoint labels in the image to determine the scale, "
-        "then locate the marked position in the image and answer from that visual evidence."
+        f"{NUMBERLINE_CORPUS_INSTRUCTION} "
+        "For this item, do not move a slider. Choose the number that is marked on the number line."
     )
 
 
 def _numberline_slider_instruction(target_value: str) -> str:
     return (
-        "You are a child taking a math test. "
-        "Use only the number line image. "
-        "Read the left and right endpoint labels in the image to determine the scale. "
-        f"Find where {target_value} belongs on that scale. "
+        f"{NUMBERLINE_CORPUS_INSTRUCTION} "
+        f"The target number is {target_value}. "
         "Compute the relative slider position using position = (target - left_endpoint) / (right_endpoint - left_endpoint). "
         "Anchors: left endpoint -> 0.00, right endpoint -> 1.00, midpoint -> 0.50. "
         "Use 0.50 only when the target is exactly at the midpoint between the endpoints. "
         "Return only one decimal number between 0 and 1 representing the slider position. "
         "Do not return JSON, labels, or extra words."
     )
+
+
+def _format_mcq_options(options: list[str]) -> str:
+    lines: list[str] = []
+    for i, option in enumerate(options):
+        if i >= len(LABELS):
+            break
+        lines.append(f"{LABELS[i]}) {option}")
+    return "\n".join(lines)
 
 
 def _parse_slider_max(item_text: str) -> float | None:
@@ -273,7 +285,16 @@ class EgmaMathDataset(VLMDataset):
                 if context_image_paths:
                     prompt = f"<image0>\n{prompt}"
             else:
-                prompt = f"{_numberline_instruction()}\n{prompt}"
+                # For number-line 4AFC, avoid semicolon-inline option formatting
+                # and enforce an explicit final answer letter to reduce label bias.
+                option_block = _format_mcq_options(all_options)
+                prompt = (
+                    f"{_numberline_instruction()}\n"
+                    "<image0>\n"
+                    "Which option matches the marked value on the number line?\n"
+                    f"{option_block}\n"
+                    "Respond with exactly one letter: A, B, C, or D."
+                )
 
         prompt = prompt.replace("<prompt_phrase>", prompt_phrase_s)
         for i, option in enumerate(all_options, start=1):
