@@ -260,13 +260,20 @@ def cmd_run_eval(args: argparse.Namespace) -> int:
 
     task_ids = args.task if args.task else None
     model_ids = args.model if args.model else None
-    version = args.version or "current"
+    from levante_bench.config.defaults import detect_data_version
+
+    version_arg = args.version or "current"
+    if str(version_arg).strip().lower() == "current":
+        version = detect_data_version(_project_root() / "data")
+    else:
+        version = str(version_arg)
     device = resolve_device(args.device)
-    output_dir = Path(args.output_dir) if args.output_dir else None
-    if output_dir is None:
-        output_dir = _project_root() / "results" / version
+    output_dir = Path(args.output_dir) if args.output_dir else _project_root() / "results"
     data_root = _project_root() / "data"
-    print(f"Running evaluation: version={version}, device={device}, output={output_dir}")
+    print(
+        f"Running evaluation: version={version}, device={device}, "
+        f"output_base={output_dir} (per-model: {output_dir / version}/<model>_<size>/)"
+    )
     print(f"  Data root: {data_root}")
     if task_ids:
         print(f"  Tasks: {', '.join(task_ids)}")

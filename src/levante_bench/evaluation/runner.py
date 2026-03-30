@@ -8,6 +8,7 @@ from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
 
 from levante_bench.config import get_task_def, load_model_config, load_task_config
+from levante_bench.config.defaults import detect_data_version
 from levante_bench.data.loaders import load_human_proportions
 from levante_bench.evaluation.adapters import postprocess_task_outputs
 from levante_bench.evaluation.cache import load_cache, save_cache, trial_hash
@@ -33,9 +34,20 @@ def resolve_device(device: str) -> str:
 def run_eval(cfg: DictConfig) -> dict[str, Path]:
     """Evaluate each model across all tasks using experiment config."""
     data_root = Path(cfg.data_root)
-    version = cfg.get("version", "current")
+    if not data_root.is_absolute():
+        data_root = Path.cwd() / data_root
+
+    raw_version = cfg.get("version", "current")
+    if str(raw_version).strip().lower() == "current":
+        version = detect_data_version(data_root)
+    else:
+        version = str(raw_version)
+
     output_base = Path(cfg.get("output_dir", "results"))
-    device = cfg.get("device", "cpu")
+    if not output_base.is_absolute():
+        output_base = Path.cwd() / output_base
+
+    device = resolve_device(str(cfg.get("device", "auto")))
     task_overrides_cfg = cfg.get("task_overrides") or {}
     task_overrides = OmegaConf.to_container(task_overrides_cfg, resolve=True) if isinstance(task_overrides_cfg, DictConfig) else task_overrides_cfg
     if not isinstance(task_overrides, dict):
