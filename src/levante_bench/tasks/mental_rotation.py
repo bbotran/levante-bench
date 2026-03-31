@@ -1,4 +1,4 @@
-"""Matrix Reasoning dataset. Context: optional image, options: images."""
+"""Mental Rotation dataset. Context: optional image, options: images."""
 
 import random
 
@@ -9,23 +9,21 @@ from levante_bench.tasks.image_index import build_image_index
 from levante_bench.tasks.registry import register_task
 
 LABELS = ["A", "B", "C", "D"]
-
-
-@register_task("matrix-reasoning")
-class MatrixReasoningDataset(VLMDataset):
-    """Reads matrix-reasoning trials from manifest.csv with image options."""
+@register_task("mental-rotation")
+class MentalRotationDataset(VLMDataset):
+    """Reads mental-rotation trials from manifest.csv with image options."""
 
     def __init__(self, task_def, version, data_root=None):
         super().__init__(task_def=task_def, version=version, data_root=data_root)
         self.manifest = self._load_manifest()
-        self.image_dir = self.data_root / "assets" / self.version / "visual" / "matrix-reasoning"
+        self.image_dir = self.data_root / "assets" / self.version / "visual" / "mental-rotation"
         self.image_index = build_image_index(self.image_dir)
 
     def _load_manifest(self) -> pd.DataFrame:
-        """Load and filter manifest rows for matrix-reasoning task."""
+        """Load and filter manifest rows for mental-rotation task."""
         manifest_path = self.data_root / "assets" / "manifest.csv"
         df = pd.read_csv(manifest_path)
-        df = df[df["task"] == "matrix-reasoning"]
+        df = df[df["task"] == "mental-rotation"]
         return df.reset_index(drop=True)
 
     def __len__(self):
@@ -34,8 +32,8 @@ class MatrixReasoningDataset(VLMDataset):
     def __getitem__(self, idx):
         row = self.manifest.iloc[idx]
 
-        answer = str(row["answer"])
-        alternatives = str(row["response_alternatives"]).split(",")
+        answer = row["answer"]
+        alternatives = row["response_alternatives"].split(",")
         all_options = [answer] + alternatives
 
         rng = random.Random(row["item_uid"])
@@ -54,11 +52,9 @@ class MatrixReasoningDataset(VLMDataset):
                 )
             option_image_paths.append(str(path))
 
-        prompt_phrase = str(row.get("prompt_phrase", ""))
-        prompt = str(row.get("full_prompt", ""))
-        if prompt in {"NA", "nan"}:
-            prompt = str(row.get("prompt", ""))
-        prompt = prompt.replace("<prompt_phrase>", prompt_phrase)
+        prompt_phrase = row["prompt_phrase"]
+        prompt = row["full_prompt"]
+        prompt = prompt.replace("<prompt_phrase>", str(prompt_phrase))
 
         context_image_paths = []
         if "<prompt_image>" in prompt:

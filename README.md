@@ -71,6 +71,19 @@ python -m levante_bench.cli experiment=configs/experiment.yaml tasks=[theory-of-
 - **Validation runner:** Added `scripts/validate_all.sh` to run lint/tests/GPU check plus smoke or full benchmark validations in one command.
 - **Result history reporting:** Added `scripts/list_benchmark_results.py` to list benchmark and prompt-experiment outputs with metric deltas vs prior runs.
 
+## Result visualization
+
+```bash
+# Heatmap of models x tasks accuracy
+python scripts/plot_results.py
+
+# Specific version
+python scripts/plot_results.py --version 2026-03-24
+
+# Text table only
+python scripts/plot_results.py --no-plot
+```
+
 ## Result inspection
 
 Use these commands to verify what ran and compare with prior runs:
