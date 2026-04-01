@@ -37,6 +37,7 @@ wheels/
 
 # Virtual environments
 .venv/
+.venv-aquila/
 venv/
 ENV/
 

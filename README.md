@@ -114,6 +114,8 @@ See [comparison/README.md](comparison/README.md) for details.
 ## Docs
 
 See [docs/README.md](docs/README.md) for data schema, releases, adding tasks/models, and secrets setup.
+See [docs/aquila-intermediate-runbook.md](docs/aquila-intermediate-runbook.md) for Aquila intermediate checkpoint integration and dual-environment setup.
+See [docs/environment-split.md](docs/environment-split.md) for benchmark vs Aquila virtualenv activation and usage.
 See [scripts/README.md](scripts/README.md) for a script-by-script command index.
 See [CHANGELOG.md](CHANGELOG.md) for ongoing project update history.
 
