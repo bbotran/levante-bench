@@ -1,13 +1,14 @@
 """Backward-compatibility shim.
 
+This file re-exports model implementations so existing imports from
+`levante_bench.models.vlm` continue to work unchanged.
+"""
+
 import base64
 import mimetypes
 import os
 import re
-
-This file re-exports them so that existing code importing from
-``levante_bench.models.vlm`` continues to work unchanged.
-"""
+from typing import Optional
 
 import requests
 import torch
