@@ -22,6 +22,7 @@ _SYSTEM_PROMPT = (
 )
 
 
+@register("aquila_vl_checkpoint")
 @register("aquila_vl")
 class AquilaVLModel(VLMModel):
     """Aquila-VL via LLaVA-NeXT loader (official usage path)."""
