@@ -17,7 +17,7 @@ This directory contains data acquisition, benchmark pipelines, analysis utilitie
 - `migrate_assets_to_versioned_bucket.py`
   - **Purpose:** copy corpus/visual/manifest from source bucket into versioned destination prefix
   - **Inputs:** `--version`, `--dest-bucket`, optional `--dest-root-prefix` (default `corpus_data`), optional `--task`, `--dry-run`
-  - **Outputs:** `gs://<dest-bucket>/<dest-root-prefix>/<version>/...`
+  - **Outputs:** `gs://<dest-bucket>/<dest-root-prefix>/<version>/...` including `manifest.csv` and `translations/item-bank-translations.csv` when present
   - **Example:** `python scripts/migrate_assets_to_versioned_bucket.py --version 2026-03-24 --dest-bucket gs://levante-bench --dest-root-prefix corpus_data --dry-run`
 - `download_results_from_drive.py`
   - **Purpose:** download shared benchmark result folders from Google Drive

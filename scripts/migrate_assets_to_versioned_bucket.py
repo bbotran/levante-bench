@@ -6,11 +6,13 @@ Source layout (public):
   corpus/<task>/<file>.csv
   visual/<task>/...
   manifest.csv
+  translations/item-bank-translations.csv
 
 Destination layout:
   gs://<dest-bucket>/<dest-root-prefix>/<version>/corpus/<task>/<file>.csv
   gs://<dest-bucket>/<dest-root-prefix>/<version>/visual/<task>/...
   gs://<dest-bucket>/<dest-root-prefix>/<version>/manifest.csv
+  gs://<dest-bucket>/<dest-root-prefix>/<version>/translations/item-bank-translations.csv
 """
 
 from __future__ import annotations
@@ -150,6 +152,24 @@ def run(
         _run_cp(f"{source_root}/manifest.csv", f"{dest_prefix}/manifest.csv", dry_run=dry_run)
     else:
         print("Source manifest.csv not found at bucket root; skipping manifest copy.")
+
+    # Optional translations snapshot.
+    source_translations_key = (
+        f"{source_prefix}/translations/item-bank-translations.csv"
+        if source_prefix
+        else "translations/item-bank-translations.csv"
+    )
+    if _object_exists(source_bucket, source_translations_key):
+        _run_cp(
+            f"{source_root}/translations/item-bank-translations.csv",
+            f"{dest_prefix}/translations/item-bank-translations.csv",
+            dry_run=dry_run,
+        )
+    else:
+        print(
+            "Source translations/item-bank-translations.csv not found; "
+            "skipping translations copy."
+        )
 
     op_count = 0
     for t in tasks:

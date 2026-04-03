@@ -217,6 +217,11 @@ python scripts/download_levante_assets.py --version hackathon --workers 8
 `corpus_data` is the default destination prefix in the migration script, and can
 be changed with `--dest-root-prefix`.
 
+Versioned snapshots also include:
+
+- `manifest.csv`
+- `translations/item-bank-translations.csv`
+
 When running benchmark/eval commands with `--version current`, local version
 resolution now picks the most recently modified folder under `data/assets/`
 (not only `YYYY-MM-DD` names), so labels like `hackathon` are supported.

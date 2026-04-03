@@ -358,6 +358,22 @@ def run(
             f"{manifest_compat} if present."
         )
 
+    # Optional translations snapshot.
+    translations_key = (
+        f"{download_version_prefix}/translations/item-bank-translations.csv"
+    )
+    translations_out = (
+        assets_dir / "translations" / "item-bank-translations.csv"
+    )
+    try:
+        _download_file(base_url, translations_key, translations_out)
+        print(f"Downloaded translations: {translations_key}")
+    except requests.HTTPError:
+        print(
+            f"Warning: {translations_key} not found in bucket; "
+            "skipping translations download."
+        )
+
     for t in tasks:
         internal_name = t["internal_name"]
         corpus_file = t["corpus_file"]
