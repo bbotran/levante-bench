@@ -9,8 +9,17 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
+
+import pytest
+
+
+pytestmark = pytest.mark.skipif(
+    not os.getenv("LEVANTE_RUN_INTEGRATION"),
+    reason="Integration-only model inference test. Set LEVANTE_RUN_INTEGRATION=1 to run.",
+)
 
 
 def run_test(name, fn):
@@ -42,8 +51,11 @@ def test_parse_answer(model):
     cases = [
         ('{"answer": "A", "reason": "it matches"}', "A"),
         ('{"answer": "B"}', "B"),
+        ('{"answer": "C", "reason": "truncated"', "C"),
         ("The correct answer is C", "C"),
         ("The answer is D", "D"),
+        ("Answer: B", "B"),
+        ("correct option is A", "A"),
         ("A", "A"),
         ("B.", "B"),
         ("", None),

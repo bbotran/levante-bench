@@ -1,5 +1,6 @@
 """Run evaluation: for each model, evaluate all tasks, write results."""
 
+import inspect
 import sys
 from pathlib import Path
 
@@ -16,6 +17,29 @@ from levante_bench.evaluation.human_comparison import annotate_human_metrics
 from levante_bench.evaluation.outputs import write_task_csv, write_summary_csv
 from levante_bench.models import get_model_class
 from levante_bench.tasks import get_task_dataset
+
+
+def _two_letter_language_code(language: object) -> str | None:
+    """Extract a normalized 2-letter language code from a locale string."""
+    value = str(language or "").strip()
+    if not value:
+        return None
+    primary = value.split("-", 1)[0].split("_", 1)[0].lower()
+    letters = "".join(ch for ch in primary if ch.isalpha())
+    if len(letters) < 2:
+        return None
+    return letters[:2]
+
+
+def _results_language_suffix(task_overrides: dict) -> str:
+    """Return folder suffix (e.g., '-de') for non-English prompt language."""
+    global_overrides = task_overrides.get("__all__", {})
+    if not isinstance(global_overrides, dict):
+        return ""
+    code = _two_letter_language_code(global_overrides.get("prompt_language"))
+    if not code or code == "en":
+        return ""
+    return f"-{code}"
 
 
 def resolve_device(device: str) -> str:
@@ -52,6 +76,7 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
     task_overrides = OmegaConf.to_container(task_overrides_cfg, resolve=True) if isinstance(task_overrides_cfg, DictConfig) else task_overrides_cfg
     if not isinstance(task_overrides, dict):
         task_overrides = {}
+    lang_suffix = _results_language_suffix(task_overrides)
     results = {}
 
     for model_entry in cfg.models:
@@ -76,6 +101,7 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
 
         size = model_cfg.get("size", "")
         model_label = f"{model_name}_{size}" if size else model_name
+        model_label = f"{model_label}{lang_suffix}"
 
         # Load model once for all tasks
         model_cls = get_model_class(model_name)
@@ -83,7 +109,33 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
             print(f"  Skip model {model_name}: not registered", file=sys.stderr)
             continue
 
-        model = model_cls(model_name=model_cfg["hf_name"], device=device)
+        ctor_cfg = {
+            k: v
+            for k, v in model_cfg.items()
+            if k
+            not in {
+                "name",
+                "hf_name",
+                "size",
+                "max_new_tokens",
+                "use_json_format",
+                "capabilities",
+            }
+        }
+        sig = inspect.signature(model_cls.__init__)
+        has_var_kwargs = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in sig.parameters.values()
+        )
+        if not has_var_kwargs:
+            accepted = {
+                name
+                for name in sig.parameters
+                if name not in {"self", "model_name", "device"}
+            }
+            ctor_cfg = {k: v for k, v in ctor_cfg.items() if k in accepted}
+
+        model = model_cls(model_name=model_cfg["hf_name"], device=device, **ctor_cfg)
         model.use_json_format = model_cfg.get("use_json_format", True)
         model.load()
 
@@ -106,7 +158,13 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
                 continue
 
             # Load task dataset
-            overrides = task_overrides.get(task_id, {}) if isinstance(task_overrides, dict) else {}
+            global_overrides = task_overrides.get("__all__", {}) if isinstance(task_overrides, dict) else {}
+            task_specific_overrides = task_overrides.get(task_id, {}) if isinstance(task_overrides, dict) else {}
+            overrides = {}
+            if isinstance(global_overrides, dict):
+                overrides.update(global_overrides)
+            if isinstance(task_specific_overrides, dict):
+                overrides.update(task_specific_overrides)
             task_def = get_task_def(task_id, version, data_root=data_root, task_overrides=overrides)
             if task_def is None:
                 print(f"  Skip {task_id}: no task def for version={version}", file=sys.stderr)

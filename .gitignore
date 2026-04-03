@@ -11,6 +11,7 @@
 
 # Generated evaluation artifacts
 /results/
+/scripts/results/
 /screenshots/
 
 # Python
@@ -37,6 +38,7 @@ wheels/
 
 # Virtual environments
 .venv/
+.venv-aquila/
 venv/
 ENV/
 
@@ -55,6 +57,7 @@ Thumbs.db
 
 # Testing
 .pytest_cache/
+.hypothesis/
 .coverage
 htmlcov/
 
