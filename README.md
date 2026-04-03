@@ -102,6 +102,77 @@ scripts/validate_all.sh --full-benchmarks
 scripts/validate_all.sh --with-r-validation
 ```
 
+## Testing strategy
+
+The test suite is split into fast unit/property tests (default) and opt-in
+integration tests (model loading / dataset end-to-end checks).
+
+- **Default pytest run:** `python -m pytest`
+  - Runs unit tests for parsing, scoring, aggregation, runner utils, cache
+    behavior, and API retry logic.
+  - Includes property-based fuzz tests (Hypothesis) for parser robustness.
+- **Integration tests (opt-in):**
+  - `tests/test_model_inference.py`
+  - `tests/test_task_datasets.py`
+  - These are intentionally gated behind `LEVANTE_RUN_INTEGRATION=1` so
+    default CI/local runs stay deterministic and fast.
+  - Run with:
+    - `LEVANTE_RUN_INTEGRATION=1 python -m pytest`
+
+Current parser-focused coverage includes:
+
+- `parse_answer` / `parse_answer_v2` branch coverage (JSON, embedded JSON,
+  phrase patterns, exact/prefix forms, ambiguous-prose rejection).
+- `parse_numeric_answer` / `parse_numeric_v2` branch coverage (strict JSON,
+  embedded JSON, slider mode constraints, fallback behavior).
+- `<imageN>` interleaving behavior across model adapters.
+- `evaluate_trial` correctness for label, numeric, and slider formats.
+- postprocessing accuracy aggregation and ordering checks.
+- cache round-trip and cache-hit behavior in `run_eval`.
+- GPT-5.3 retry logic (`5xx` retry and token-cap doubling path).
+
+## Parser v2 model
+
+Evaluation now uses a canonical parse layer with provenance so correctness is
+decided in normalized answer space, not output surface format.
+
+### Canonicalization
+
+- **Label tasks:** normalize to `predicted_label` in `option_labels`.
+- **Numeric/slider tasks:** normalize to `predicted_value` (float), then compare
+  to `target_value` using `slider_tolerance`.
+- **Slider tasks:** normalize slider position, clamp to `[0,1]`, then map back to
+  task scale via `slider_min`/`slider_max`.
+
+### Parser v2 outputs
+
+`ParseResult` (in `src/levante_bench/models/base.py`) returns:
+
+- `value` (canonical parsed value/label or `None`)
+- `reason` (extracted reason or source text)
+- `parse_method` (which rule matched)
+- `parse_confidence` (`high` / `medium` / `low` / `none`)
+- `raw_candidate` (raw extracted token)
+
+`evaluate_trial()` now uses:
+
+- `parse_answer_result(...)` for label tasks
+- `parse_numeric_result(...)` for numeric/slider tasks
+
+Backward-compatible APIs (`parse_answer`, `parse_numeric_answer`) are kept for
+existing callers, but benchmark scoring uses parser-v2 paths.
+
+### CSV provenance fields
+
+Per-task CSV outputs now include parser provenance columns:
+
+- `parse_method`
+- `parse_confidence`
+- `parse_raw_candidate`
+
+This supports score audits (for example, reviewing accuracy by parse method or
+identifying low-confidence parses).
+
 ## Comparison approach
 
 The benchmark compares model outputs to human behavioral data on two dimensions:
