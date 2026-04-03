@@ -131,6 +131,11 @@ This directory contains data acquisition, benchmark pipelines, analysis utilitie
   - **Inputs:** `--report-json`, `--output`, `--min-tasks`
   - **Outputs:** PNG line chart (tasks on x-axis, accuracy on y-axis)
   - **Example:** `python scripts/plot_model_comparison_lines.py --report-json results/model-comparison-report.json --output results/model-comparison-line-chart.png`
+- `plot_aquila_stages.py`
+  - **Purpose:** compare Aquila intermediate stages (`stage2a/b/c`, `stage3`) and final production performance by task
+  - **Inputs:** `--results-root`, `--output`
+  - **Outputs:** PNG with task-wise stage lines + mean-accuracy bars
+  - **Example:** `python scripts/analysis/plot_aquila_stages.py --results-root scripts/results/aquila-checkpoints/2026-03-29`
 
 ## Notes
 

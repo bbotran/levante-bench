@@ -11,6 +11,7 @@
 
 # Generated evaluation artifacts
 /results/
+/scripts/results/
 /screenshots/
 
 # Python

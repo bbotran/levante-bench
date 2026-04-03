@@ -20,7 +20,7 @@ DEFAULT_RESULTS_FOLDER_URL = (
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def _build_parser() -> argparse.ArgumentParser:
