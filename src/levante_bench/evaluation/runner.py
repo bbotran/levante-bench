@@ -19,6 +19,29 @@ from levante_bench.models import get_model_class
 from levante_bench.tasks import get_task_dataset
 
 
+def _two_letter_language_code(language: object) -> str | None:
+    """Extract a normalized 2-letter language code from a locale string."""
+    value = str(language or "").strip()
+    if not value:
+        return None
+    primary = value.split("-", 1)[0].split("_", 1)[0].lower()
+    letters = "".join(ch for ch in primary if ch.isalpha())
+    if len(letters) < 2:
+        return None
+    return letters[:2]
+
+
+def _results_language_suffix(task_overrides: dict) -> str:
+    """Return folder suffix (e.g., '-de') for non-English prompt language."""
+    global_overrides = task_overrides.get("__all__", {})
+    if not isinstance(global_overrides, dict):
+        return ""
+    code = _two_letter_language_code(global_overrides.get("prompt_language"))
+    if not code or code == "en":
+        return ""
+    return f"-{code}"
+
+
 def resolve_device(device: str) -> str:
     """Resolve auto device selection with safe CUDA -> CPU fallback."""
     choice = (device or "auto").strip().lower()
@@ -53,6 +76,7 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
     task_overrides = OmegaConf.to_container(task_overrides_cfg, resolve=True) if isinstance(task_overrides_cfg, DictConfig) else task_overrides_cfg
     if not isinstance(task_overrides, dict):
         task_overrides = {}
+    lang_suffix = _results_language_suffix(task_overrides)
     results = {}
 
     for model_entry in cfg.models:
@@ -77,6 +101,7 @@ def run_eval(cfg: DictConfig) -> dict[str, Path]:
 
         size = model_cfg.get("size", "")
         model_label = f"{model_name}_{size}" if size else model_name
+        model_label = f"{model_label}{lang_suffix}"
 
         # Load model once for all tasks
         model_cls = get_model_class(model_name)

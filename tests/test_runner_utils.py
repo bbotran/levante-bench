@@ -137,3 +137,46 @@ def test_run_eval_applies_global_and_task_specific_overrides(
         "prompt_language": "de",
         "include_numberline": False,
     }
+
+
+def test_run_eval_appends_non_english_language_suffix_to_model_dir(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    class DummyModel:
+        def __init__(self, model_name: str, device: str) -> None:
+            pass
+
+        def load(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        runner,
+        "load_model_config",
+        lambda model_name: OmegaConf.create(
+            {
+                "hf_name": "base/hf-model",
+                "size": "tiny",
+                "max_new_tokens": 64,
+                "use_json_format": True,
+            }
+        ),
+    )
+    monkeypatch.setattr(runner, "get_model_class", lambda model_name: DummyModel)
+    monkeypatch.setattr(runner, "load_cache", lambda path: {})
+    monkeypatch.setattr(runner, "write_summary_csv", lambda model_dir, _: model_dir / "summary.csv")
+
+    cfg = OmegaConf.create(
+        {
+            "data_root": str(tmp_path / "data"),
+            "output_dir": str(tmp_path / "out"),
+            "version": "unit-test",
+            "device": "cpu",
+            "models": ["dummy"],
+            "tasks": [],
+            "task_overrides": {"__all__": {"prompt_language": "de-CH"}},
+        }
+    )
+
+    results = runner.run_eval(cfg)
+    assert results["dummy"].parent.name == "dummy_tiny-de"
