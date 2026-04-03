@@ -67,6 +67,22 @@ def test_parse_numeric_answer_modes(
         assert value == pytest.approx(expected)
 
 
+def test_parse_answer_v2_includes_provenance() -> None:
+    model = VLMModel(model_name="dummy")
+    result = model.parse_answer_v2('{"answer":"b","reason":"because"}', ["A", "B", "C", "D"])
+    assert result.value == "B"
+    assert result.parse_method == "strict_json"
+    assert result.parse_confidence == "high"
+
+
+def test_parse_numeric_v2_includes_provenance() -> None:
+    model = VLMModel(model_name="dummy")
+    result = model.parse_numeric_v2('{"answer":"2.75"}', strict_json=True)
+    assert result.value == pytest.approx(2.75)
+    assert result.parse_method == "strict_json"
+    assert result.parse_confidence == "high"
+
+
 @pytest.mark.parametrize("model_cls", [Qwen35Model, InternVL35Model])
 def test_model_specific_parse_answer_prefers_last_sentence(model_cls) -> None:
     model = model_cls(model_name="dummy")

@@ -4,12 +4,13 @@ from typing import Optional
 
 import torch
 
-from levante_bench.models.base import VLMModel
+from levante_bench.models.base import ParseResult, VLMModel
 from levante_bench.models.registry import register
 from levante_bench.models._common import (
     DTYPE_MAP,
     build_pil_content,
     load_pil_images,
+    parse_answer_result_with_fallback,
     parse_answer_with_fallback,
 )
 
@@ -112,3 +113,7 @@ class InternVL35Model(VLMModel):
     ) -> tuple[Optional[str], str]:
         """Base-class parser first; falls back to reverse-sentence scan."""
         return parse_answer_with_fallback(self, text, option_labels)
+
+    def parse_answer_result(self, text: str, option_labels: list[str]) -> ParseResult:
+        """Parser with provenance, including reverse-sentence fallback."""
+        return parse_answer_result_with_fallback(self, text, option_labels)

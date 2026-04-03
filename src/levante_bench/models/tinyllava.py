@@ -19,9 +19,13 @@ from typing import Optional
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from levante_bench.models.base import VLMModel
+from levante_bench.models.base import ParseResult, VLMModel
 from levante_bench.models.registry import register
-from levante_bench.models._common import DTYPE_MAP, parse_answer_with_fallback
+from levante_bench.models._common import (
+    DTYPE_MAP,
+    parse_answer_result_with_fallback,
+    parse_answer_with_fallback,
+)
 
 _LABELS = ["A", "B", "C", "D"]
 _CELL = 224   # each option image is resized to CELL × CELL pixels
@@ -222,3 +226,7 @@ class TinyLLaVAModel(VLMModel):
     ) -> tuple[Optional[str], str]:
         """Base-class parser first; falls back to reverse-sentence scan."""
         return parse_answer_with_fallback(self, text, option_labels)
+
+    def parse_answer_result(self, text: str, option_labels: list[str]) -> ParseResult:
+        """Parser with provenance, including reverse-sentence fallback."""
+        return parse_answer_result_with_fallback(self, text, option_labels)

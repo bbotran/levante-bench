@@ -21,7 +21,7 @@ import requests
 import torch
 from PIL import Image
 
-from levante_bench.models.base import VLMModel
+from levante_bench.models.base import ParseResult, VLMModel
 from levante_bench.models.registry import register
 
 
@@ -259,6 +259,25 @@ class Qwen35Model(VLMModel):
                 if re.search(rf'\b{re.escape(label)}\b', sentence, re.IGNORECASE):
                     return label, sentence
         return None, text
+
+    def parse_answer_result(self, text: str, option_labels: list[str]) -> ParseResult:
+        """Parser with provenance, including reverse-sentence fallback."""
+        result = super().parse_answer_result(text, option_labels)
+        if result.value is not None:
+            return result
+        sentences = re.split(r'[.!?\n]', text)
+        for sentence in reversed(sentences):
+            sentence = sentence.strip()
+            for label in option_labels:
+                if re.search(rf'\b{re.escape(label)}\b', sentence, re.IGNORECASE):
+                    return ParseResult(
+                        value=label.upper(),
+                        reason=sentence,
+                        parse_method="reverse_sentence_fallback",
+                        parse_confidence="low",
+                        raw_candidate=label,
+                    )
+        return result
 
 
 @register("gemini_pro")
@@ -669,3 +688,22 @@ class InternVL35Model(VLMModel):
                 if re.search(rf'\b{re.escape(label)}\b', sentence, re.IGNORECASE):
                     return label, sentence
         return None, text
+
+    def parse_answer_result(self, text: str, option_labels: list[str]) -> ParseResult:
+        """Parser with provenance, including reverse-sentence fallback."""
+        result = super().parse_answer_result(text, option_labels)
+        if result.value is not None:
+            return result
+        sentences = re.split(r'[.!?\n]', text)
+        for sentence in reversed(sentences):
+            sentence = sentence.strip()
+            for label in option_labels:
+                if re.search(rf'\b{re.escape(label)}\b', sentence, re.IGNORECASE):
+                    return ParseResult(
+                        value=label.upper(),
+                        reason=sentence,
+                        parse_method="reverse_sentence_fallback",
+                        parse_confidence="low",
+                        raw_candidate=label,
+                    )
+        return result

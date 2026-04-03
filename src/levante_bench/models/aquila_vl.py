@@ -8,11 +8,12 @@ from typing import Optional
 
 import torch
 
-from levante_bench.models.base import VLMModel
+from levante_bench.models.base import ParseResult, VLMModel
 from levante_bench.models.registry import register
 from levante_bench.models._common import (
     DTYPE_MAP,
     load_pil_images,
+    parse_answer_result_with_fallback,
     parse_answer_with_fallback,
 )
 
@@ -140,6 +141,10 @@ class AquilaVLModel(VLMModel):
     ) -> tuple[Optional[str], str]:
         """Base-class parser first; falls back to reverse-sentence scan."""
         return parse_answer_with_fallback(self, text, option_labels)
+
+    def parse_answer_result(self, text: str, option_labels: list[str]) -> ParseResult:
+        """Parser with provenance, including reverse-sentence fallback."""
+        return parse_answer_result_with_fallback(self, text, option_labels)
 
     def _normalize_local_config(self, model_dir: Path) -> None:
         """Patch known non-portable checkpoints fields after download.

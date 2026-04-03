@@ -1,8 +1,9 @@
 """Base class for VLM evaluation models."""
 
+from dataclasses import dataclass
 import json
 import re
-from typing import Optional
+from typing import Any, Literal, Optional
 
 
 ANSWER_FORMAT_INSTRUCTION = '\n\nRespond in JSON format: {"answer": "<letter>", "reason": "<short reason>"}'
@@ -11,6 +12,17 @@ SLIDER_POSITION_FORMAT_INSTRUCTION = (
     "\n\nOutput only one decimal number between 0 and 1 "
     "(the slider position from left to right). No JSON or extra text."
 )
+
+
+@dataclass(frozen=True)
+class ParseResult:
+    """Canonical parse output with provenance for auditing."""
+
+    value: Any
+    reason: str
+    parse_method: str
+    parse_confidence: Literal["high", "medium", "low", "none"]
+    raw_candidate: str = ""
 
 
 class VLMModel:
@@ -73,11 +85,17 @@ class VLMModel:
         clean_text = self.parse_response(raw_output)
         if answer_format in {"numeric", "slider_position"}:
             strict_json = answer_format == "slider_position"
-            predicted_value, reason = self.parse_numeric_answer(
+            numeric_result = self.parse_numeric_result(
                 clean_text,
                 strict_json=strict_json,
                 slider_mode=(answer_format == "slider_position"),
             )
+            predicted_value = (
+                float(numeric_result.value)
+                if numeric_result.value is not None
+                else None
+            )
+            reason = numeric_result.reason
             target_value = trial.get("target_value")
             tolerance = trial.get("slider_tolerance")
             predicted_position = None
@@ -104,6 +122,9 @@ class VLMModel:
                 "predicted_value": predicted_value,
                 "predicted_slider_position": predicted_position,
                 "reason": reason,
+                "parse_method": numeric_result.parse_method,
+                "parse_confidence": numeric_result.parse_confidence,
+                "parse_raw_candidate": numeric_result.raw_candidate,
                 "correct_label": None,
                 "target_value": target_value,
                 "slider_tolerance": tolerance,
@@ -113,13 +134,20 @@ class VLMModel:
                 "option_labels": trial.get("option_labels", []),
             }
 
-        predicted_label, reason = self.parse_answer(clean_text, trial["option_labels"])
+        answer_result = self.parse_answer_result(clean_text, trial["option_labels"])
+        predicted_label = (
+            str(answer_result.value).upper() if answer_result.value is not None else None
+        )
+        reason = answer_result.reason
         return {
             "trial_id": trial["trial_id"],
             "item_uid": trial["item_uid"],
             "generated_text": clean_text,
             "predicted_label": predicted_label,
             "reason": reason,
+            "parse_method": answer_result.parse_method,
+            "parse_confidence": answer_result.parse_confidence,
+            "parse_raw_candidate": answer_result.raw_candidate,
             "correct_label": trial["correct_label"],
             "is_correct": predicted_label == trial["correct_label"],
             # Carry option context for downstream human-comparison annotation
@@ -133,7 +161,35 @@ class VLMModel:
         strict_json: bool = False,
         slider_mode: bool = False,
     ) -> tuple[Optional[float], str]:
-        """Extract numeric answer and reason from model output."""
+        """Backward-compatible numeric parser API: (value, reason)."""
+        result = self.parse_numeric_result(
+            text,
+            strict_json=strict_json,
+            slider_mode=slider_mode,
+        )
+        value = float(result.value) if result.value is not None else None
+        return value, result.reason
+
+    def parse_numeric_v2(
+        self,
+        text: str,
+        strict_json: bool = False,
+        slider_mode: bool = False,
+    ) -> ParseResult:
+        """Alias for parse_numeric_result for explicit v2 callers."""
+        return self.parse_numeric_result(
+            text,
+            strict_json=strict_json,
+            slider_mode=slider_mode,
+        )
+
+    def parse_numeric_result(
+        self,
+        text: str,
+        strict_json: bool = False,
+        slider_mode: bool = False,
+    ) -> ParseResult:
+        """Extract canonical numeric value with parse provenance."""
         text = text.strip()
 
         if slider_mode:
@@ -141,7 +197,13 @@ class VLMModel:
             # never first-number fallback from arbitrary prose.
             if re.fullmatch(r"[-+]?\d*\.?\d+", text):
                 try:
-                    return float(text), text
+                    return ParseResult(
+                        value=float(text),
+                        reason=text,
+                        parse_method="slider_scalar",
+                        parse_confidence="high",
+                        raw_candidate=text,
+                    )
                 except ValueError:
                     pass
 
@@ -150,7 +212,13 @@ class VLMModel:
                 answer = parsed.get("answer")
                 reason = str(parsed.get("reason", ""))
                 if answer is not None and not isinstance(answer, (dict, list, tuple)):
-                    return float(answer), reason
+                    return ParseResult(
+                        value=float(answer),
+                        reason=reason,
+                        parse_method="slider_json",
+                        parse_confidence="high",
+                        raw_candidate=str(answer),
+                    )
             except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
                 pass
 
@@ -161,10 +229,21 @@ class VLMModel:
                 m = re.search(pattern, text, re.IGNORECASE)
                 if m:
                     try:
-                        return float(m.group("num")), text
+                        return ParseResult(
+                            value=float(m.group("num")),
+                            reason=text,
+                            parse_method="slider_explicit_pattern",
+                            parse_confidence="medium",
+                            raw_candidate=m.group("num"),
+                        )
                     except ValueError:
                         pass
-            return None, text
+            return ParseResult(
+                value=None,
+                reason=text,
+                parse_method="unparseable",
+                parse_confidence="none",
+            )
 
         # 1) Plain JSON
         try:
@@ -174,8 +253,19 @@ class VLMModel:
             if answer is not None:
                 # In strict mode, accept only scalar numeric answers.
                 if strict_json and isinstance(answer, (dict, list, tuple)):
-                    return None, text
-                return float(answer), reason
+                    return ParseResult(
+                        value=None,
+                        reason=text,
+                        parse_method="strict_json_rejected_nested",
+                        parse_confidence="none",
+                    )
+                return ParseResult(
+                    value=float(answer),
+                    reason=reason,
+                    parse_method="strict_json" if strict_json else "json",
+                    parse_confidence="high",
+                    raw_candidate=str(answer),
+                )
         except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
             pass
 
@@ -184,16 +274,33 @@ class VLMModel:
             m = re.search(r'"answer"\s*:\s*"?(?P<num>[-+]?\d*\.?\d+)"?', text)
             if m:
                 try:
-                    return float(m.group("num")), text
+                    return ParseResult(
+                        value=float(m.group("num")),
+                        reason=text,
+                        parse_method="strict_json_embedded_answer",
+                        parse_confidence="medium",
+                        raw_candidate=m.group("num"),
+                    )
                 except ValueError:
                     pass
-            return None, text
+            return ParseResult(
+                value=None,
+                reason=text,
+                parse_method="unparseable",
+                parse_confidence="none",
+            )
 
         # 2) Embedded JSON answer
         m = re.search(r'"answer"\s*:\s*"?(?P<num>[-+]?\d*\.?\d+)"?', text)
         if m:
             try:
-                return float(m.group("num")), text
+                return ParseResult(
+                    value=float(m.group("num")),
+                    reason=text,
+                    parse_method="embedded_json_answer",
+                    parse_confidence="medium",
+                    raw_candidate=m.group("num"),
+                )
             except ValueError:
                 pass
 
@@ -201,17 +308,35 @@ class VLMModel:
         m = re.search(r"(?P<num>[-+]?\d*\.?\d+)", text)
         if m:
             try:
-                return float(m.group("num")), text
+                return ParseResult(
+                    value=float(m.group("num")),
+                    reason=text,
+                    parse_method="first_number_fallback",
+                    parse_confidence="low",
+                    raw_candidate=m.group("num"),
+                )
             except ValueError:
                 pass
 
-        return None, text
+        return ParseResult(
+            value=None,
+            reason=text,
+            parse_method="unparseable",
+            parse_confidence="none",
+        )
 
     def parse_answer(self, text: str, option_labels: list[str]) -> tuple[Optional[str], str]:
-        """Extract answer label and reason. Returns (label, reason).
+        """Backward-compatible label parser API: (label, reason)."""
+        result = self.parse_answer_result(text, option_labels)
+        label = str(result.value).upper() if result.value is not None else None
+        return label, result.reason
 
-        If parsing fails, label is None and reason is the full output.
-        """
+    def parse_answer_v2(self, text: str, option_labels: list[str]) -> ParseResult:
+        """Alias for parse_answer_result for explicit v2 callers."""
+        return self.parse_answer_result(text, option_labels)
+
+    def parse_answer_result(self, text: str, option_labels: list[str]) -> ParseResult:
+        """Extract canonical answer label with parse provenance."""
         text = text.strip()
         labels_upper = [l.upper() for l in option_labels]
 
@@ -221,7 +346,13 @@ class VLMModel:
             answer = parsed.get("answer", "").strip().upper()
             reason = parsed.get("reason", "")
             if answer in labels_upper:
-                return answer, reason
+                return ParseResult(
+                    value=answer,
+                    reason=reason,
+                    parse_method="strict_json",
+                    parse_confidence="high",
+                    raw_candidate=str(parsed.get("answer", "")),
+                )
         except (json.JSONDecodeError, AttributeError):
             pass
 
@@ -232,7 +363,13 @@ class VLMModel:
             if answer in labels_upper:
                 r = re.search(r'"reason"\s*:\s*"(?P<reason>[^"]*)"', text, re.IGNORECASE)
                 reason = r.group("reason") if r else text
-                return answer, reason
+                return ParseResult(
+                    value=answer,
+                    reason=reason,
+                    parse_method="embedded_json_answer",
+                    parse_confidence="medium",
+                    raw_candidate=m.group("label"),
+                )
 
         # 3. Common natural-language patterns.
         # Require punctuation/end-of-text after the label to avoid false
@@ -249,18 +386,41 @@ class VLMModel:
             if m:
                 answer = m.group("label").upper()
                 if answer in labels_upper:
-                    return answer, text
+                    return ParseResult(
+                        value=answer,
+                        reason=text,
+                        parse_method="explicit_phrase",
+                        parse_confidence="medium",
+                        raw_candidate=m.group("label"),
+                    )
 
         # 4. Exact match (entire text is just the label)
         if text.upper() in labels_upper:
-            return text.upper(), ""
+            return ParseResult(
+                value=text.upper(),
+                reason="",
+                parse_method="exact_label",
+                parse_confidence="high",
+                raw_candidate=text,
+            )
 
         # 5. Text starts with label followed by delimiter
         for label in option_labels:
             if text.upper().startswith(label.upper()):
                 rest = text[len(label):]
                 if not rest or rest[0] in " .),:;\n":
-                    return label, rest.strip()
+                    return ParseResult(
+                        value=label.upper(),
+                        reason=rest.strip(),
+                        parse_method="prefix_label",
+                        parse_confidence="low",
+                        raw_candidate=label,
+                    )
 
         # No match — full output goes in reason
-        return None, text
+        return ParseResult(
+            value=None,
+            reason=text,
+            parse_method="unparseable",
+            parse_confidence="none",
+        )
