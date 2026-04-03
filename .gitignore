@@ -57,6 +57,7 @@ Thumbs.db
 
 # Testing
 .pytest_cache/
+.hypothesis/
 .coverage
 htmlcov/
 
