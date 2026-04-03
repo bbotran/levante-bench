@@ -20,7 +20,7 @@ Pinned deps: [requirements.txt](requirements.txt). Dev: [requirements-dev.txt](r
 
 1. **IRT model mapping:** Edit `src/levante_bench/config/irt_model_mapping.csv` to map each task to its IRT model `.rds` file in the Redivis model registry (e.g. `trog,trog/multigroup_site/overlap_items/trog_rasch_f1_scalar.rds`).
 2. **Data (R):** Install R and the `redivis` package; run `Rscript scripts/download_levante_data.R` to fetch trials and IRT models into `data/responses/<version>/`.
-3. **Assets (Python):** Run `python scripts/download_levante_assets.py [--version YYYY-MM-DD]` to download corpus and images from a versioned bucket prefix into `data/assets/<version>/`. If `--version` is omitted, the script uses `LEVANTE_DATA_VERSION` or auto-detects the latest `YYYY-MM-DD` prefix in the bucket.
+3. **Assets (Python):** Run `python scripts/download_levante_assets.py [--version VERSION]` to download corpus and images from a versioned bucket prefix into `data/assets/<version>/`. If `--version` is omitted, the script uses `LEVANTE_DATA_VERSION` or auto-detects a bucket default (latest date-style prefix, or the sole non-date prefix). Visual asset downloads are parallelized (`--workers`, default `8`).
 4. **Evaluate:** Then:
    - `levante-bench list-tasks`
    - `levante-bench list-models`
@@ -211,11 +211,15 @@ Then point downloads at the destination bucket:
 
 ```bash
 export LEVANTE_ASSETS_BUCKET_URL=https://storage.googleapis.com/levante-bench/corpus_data
-python scripts/download_levante_assets.py --version 2026-03-24
+python scripts/download_levante_assets.py --version hackathon --workers 8
 ```
 
 `corpus_data` is the default destination prefix in the migration script, and can
 be changed with `--dest-root-prefix`.
+
+When running benchmark/eval commands with `--version current`, local version
+resolution now picks the most recently modified folder under `data/assets/`
+(not only `YYYY-MM-DD` names), so labels like `hackathon` are supported.
 
 ## Citing
 

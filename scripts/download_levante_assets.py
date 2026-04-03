@@ -146,15 +146,33 @@ def _list_bucket_prefixes(bucket_name: str, parent_prefix: str = "") -> list[str
 
 
 def _detect_latest_bucket_version(bucket_name: str, base_prefix: str = "") -> str:
-    """Detect the latest YYYY-MM-DD top-level prefix in bucket."""
+    """Detect a default version prefix in bucket.
+
+    Resolution:
+    1) If there are YYYY-MM-DD prefixes, choose the latest by lexical sort.
+    2) Otherwise, if there is exactly one non-hidden prefix, choose it.
+    3) Otherwise require explicit --version / LEVANTE_DATA_VERSION.
+    """
     prefixes = _list_bucket_prefixes(bucket_name, parent_prefix=base_prefix)
     versions = sorted(p for p in prefixes if VERSION_RE.match(p))
-    if not versions:
+    if versions:
+        return versions[-1]
+
+    non_hidden = sorted(p for p in prefixes if p and not p.startswith("."))
+    if len(non_hidden) == 1:
+        return non_hidden[0]
+
+    if not non_hidden:
         raise RuntimeError(
-            "No version prefixes (YYYY-MM-DD) found in source bucket. "
+            "No version prefixes found in source bucket. "
             "Pass --version explicitly or migrate assets into versioned prefixes."
         )
-    return versions[-1]
+    raise RuntimeError(
+        "Multiple non-date version prefixes found in source bucket: "
+        f"{', '.join(non_hidden[:10])}"
+        + ("..." if len(non_hidden) > 10 else "")
+        + ". Pass --version explicitly or set LEVANTE_DATA_VERSION."
+    )
 
 
 def _download_file(base_url: str, key: str, dest: Path) -> None:
@@ -305,6 +323,9 @@ def run(
         bucket_name, base_prefix=base_prefix
     )
     version_prefix = f"{base_prefix}/{version}" if base_prefix else version
+    # Keys passed to _download_file are relative to base_url, so they should
+    # never repeat base_prefix.
+    download_version_prefix = version
     assets_dir = data_root / "assets" / version
     corpus_dir = assets_dir / "corpus"
     visual_dir = assets_dir / "visual"
@@ -321,7 +342,7 @@ def run(
     index: dict[str, dict] = {}  # item_uid -> { task, internal_name, corpus_row, image_paths }
 
     # Optional versioned manifest snapshot; update compatibility path used by loaders.
-    manifest_key = f"{version_prefix}/manifest.csv"
+    manifest_key = f"{download_version_prefix}/manifest.csv"
     manifest_snapshot = assets_dir / "manifest.csv"
     manifest_compat = data_root / "assets" / "manifest.csv"
     try:
@@ -338,23 +359,32 @@ def run(
         internal_name = t["internal_name"]
         corpus_file = t["corpus_file"]
         # 1) Corpus CSV
-        corpus_key = f"{version_prefix}/corpus/{internal_name}/{corpus_file}"
+        corpus_key = f"{download_version_prefix}/corpus/{internal_name}/{corpus_file}"
         out_corpus = corpus_dir / internal_name / corpus_file
         if not out_corpus.exists():
             _download_file(base_url, corpus_key, out_corpus)
         df = pd.read_csv(out_corpus)
         # 2) Visual assets under visual/{internal_name}/ (always download, even if corpus has no item_uid)
-        prefix = f"{version_prefix}/visual/{internal_name}/"
+        list_prefix = f"{version_prefix}/visual/{internal_name}/"
+        download_prefix = f"{download_version_prefix}/visual/{internal_name}/"
         try:
-            keys = _list_bucket_keys(bucket_name, prefix)
+            keys = _list_bucket_keys(bucket_name, list_prefix)
         except Exception:
             keys = []
+        # _download_file receives keys relative to base_url.
+        if base_prefix:
+            keys = [
+                key[len(base_prefix) + 1 :]
+                if key.startswith(f"{base_prefix}/")
+                else key
+                for key in keys
+            ]
         visual_local_dir = visual_dir / internal_name
         n_downloaded, n_skipped = _download_many(
             base_url=base_url,
             keys=keys,
             visual_local_dir=visual_local_dir,
-            prefix=prefix,
+            prefix=download_prefix,
             workers=workers,
         )
         print(f"  {internal_name}: {n_downloaded} downloaded, {n_skipped} already present ({len(keys)} keys in bucket)")
